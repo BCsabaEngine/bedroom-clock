@@ -31,6 +31,7 @@ const ESP_PITCH = 2.54;
 const ESP_ROW = g(13);
 const ESP_LEN = 23.5;
 const ESP_WID = 18;
+const ANT_LEN = 7; // PCB antenna at the end opposite the USB-C, estimated from the vendor outline (verify with the real module): no bottom copper pour under it and 2 mm beyond the module end (rule 16)
 const ESP_LABELS = { pin1: 'TX', pin2: 'RX', pin3: 'IO1', pin4: 'IO2', pin5: 'IO3', pin6: 'IO4', pin7: 'IO5', pin8: 'IO6', pin9: 'IO7', pin10: 'V5', pin11: 'GND', pin12: 'V33', pin13: 'IO13', pin14: 'IO12', pin15: 'IO11', pin16: 'IO10', pin17: 'IO9', pin18: 'IO8' } as const;
 const BASE = g(-4); // y of the bottom pin rows of both modules (the common baseline)
 const ESP = { x: g(-14), y: BASE + ESP_ROW / 2 };
@@ -95,9 +96,8 @@ const inFrame =
 const wire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = 0.25) => <trace name={name} from={`.${from}`} to={`.${to}`} pcbPath={pts.map(inFrame(owner))} thickness={`${thickness}mm`} />;
 // A layer change at p: a wire point on both sides of the via (needed in a pcbPath).
 const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'bottom'): Pt[] => [p, via(p, from, to), p];
-// GND is a bottom copper pour. Through-hole GND pins touch it directly (a plain `to="net.GND"` connection, no copper to draw); an SMD GND pin runs on the top layer to such a pad, only U3 needs a via (see README).
+// GND is a bottom copper pour (rule 16). Through-hole GND pins touch it directly (a plain `to="net.GND"` connection, no copper to draw); every SMD GND pad gets a GND via to it (see README).
 const gndTrace = (port: string) => <trace from={`.${port}`} to="net.GND" />;
-const gndWire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = GND_W) => wire(name, from, to, owner, pts, thickness);
 const pt = (x: number, y: number): P => ({ x, y });
 // No 90 deg corners (DESIGN.md rule 17): each one becomes two 45 deg bends, a T junction stays sharp. `poly` = pad centre, corners (board coordinates, orthogonal segments), pad centre; `c` = cut length (one number, or one per vertex index of `poly`); corner indices in `keep` are T junctions.
 const chamfer = (poly: P[], c: number | number[] = G, keep: number[] = []): P[] =>
@@ -150,7 +150,6 @@ const U4_Y = pt(U4.x + U4_PAD.col, U4.y - U4_PAD.pitch);
 const R2_P1 = pt(R2.x - 0.825, R2.y);
 const R2_P2 = pt(R2.x + 0.825, R2.y);
 const R1_P1 = pt(R1.x - 0.825, R1.y);
-const J3_GND = pt(J3.x + 2.54, CONN_Y);
 const J4_DATA = pt(J4.x, CONN_Y);
 const J4_V5 = pt(J4.x + 2.54, CONN_Y);
 
@@ -263,8 +262,9 @@ export default () => (
     {/* Snooze button input */}
     <connector name="J3" doNotPlace pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }} pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Input" schX={-6} schY={-6} pcbX={J3.x} pcbY={J3.y} footprint={pads(['SNZ', 'GND'], 2.54, SIG)} />
 
-    {/* GND: a bottom copper pour. The through-hole GND pins join it directly, the SMD GND pins run on the top layer to a through-hole GND pad (no via): C1 to J1, U4 GND/OE to J3. U3 GND, C3 GND and C4 GND have a via each (the only ones on a power net; C4 so that it can sit next to U4 VCC, DESIGN.md rule 24) */}
-    <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="0.25mm" />
+    {/* GND: a bottom copper pour, 1.27 mm from the board edge, with a keep-out under the ESP32 antenna end (DESIGN.md rule 16). The through-hole GND pins join it directly, every SMD GND pad (C1, U4 GND/OE, U3, C3, C4) has its own GND via */}
+    <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="1.27mm" />
+    <keepout shape="rect" layers={['bottom']} pcbX={ESP.x + ESP_LEN / 2 - ANT_LEN / 2 + 1} pcbY={ESP.y} width={`${ANT_LEN + 2}mm`} height={`${ESP_WID}mm`} allowPlacements allowTraces />
     {gndTrace('J1 > .GND')}
     {gndTrace('J3 > .GND')}
     {gndTrace('J4 > .GND')}
@@ -272,9 +272,9 @@ export default () => (
     {gndTrace('U2 > .GND')}
     {gndTrace('U2 > .GND2')}
 
-    {gndWire('GND_C1', 'C1 > .pin2', 'J1 > .GND', C1, [pt(C1.x + 1.4625, CONN_Y + (C1.x + 1.4625 - J1.x - 5.08))])}
+    <trace name="GND_C1" from=".C1 > .pin2" to="net.GND" pcbPath={hop(pt(C1.x + 1.4625, C1.y - 2.2)).map(inFrame(C1))} thickness={`${GND_W}mm`} />
     {wire45('GND_U4_OE', 'U4 > .OE', 'U4 > .GND', U4, [U4_OE, pt(U4.x, U4_OE.y), pt(U4.x, U4_GND.y), U4_GND], 0.5, [0, 0.5, 0.3])}
-    {wire45('GND_U4', 'U4 > .GND', 'J3 > .GND', U4, [U4_GND, pt(U4.x, U4_GND.y), pt(U4.x, g(-11)), pt(J3_GND.x, g(-11)), J3_GND], 0.5, [0, 0.3, G, G])}
+    <trace name="GND_U4" from=".U4 > .GND" to="net.GND" pcbPath={hop(pt(U4_GND.x, U4_GND.y - 1.4)).map(inFrame(U4))} thickness="0.5mm" />
     <trace name="GND_C3" from=".C3 > .pin2" to="net.GND" pcbPath={hop(pt(C3.x + 2.4, C3.y)).map(inFrame(C3))} thickness={`${GND_W}mm`} />
     <trace name="GND_C4" from=".C4 > .pin2" to="net.GND" pcbPath={hop(C4_GND_VIA).map(inFrame(C4))} thickness={`${GND_W}mm`} />
     <trace name="GND_U3" from=".U3 > .GND" to="net.GND" pcbPath={hop(pt(U3.x + GND_VIA.dx, U3.y + 2.3)).map(inFrame(U3))} thickness={`${GND_W}mm`} />
