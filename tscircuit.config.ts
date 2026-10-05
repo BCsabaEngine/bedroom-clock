@@ -2,5 +2,5 @@
 export default {
   mainEntrypoint: 'index.circuit.tsx',
   ignoredFiles: ['docs', 'dist'],
-  platformConfig: { partsEngineDisabled: true },
-}
+  platformConfig: { partsEngineDisabled: true }
+};

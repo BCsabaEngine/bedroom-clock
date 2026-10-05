@@ -1,0 +1,9 @@
+dist
+.tscircuit
+.claude
+__snapshots__
+docs
+node_modules
+package-lock.json
+*.md
+*.json
