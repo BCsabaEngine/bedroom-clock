@@ -1,0 +1,67 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A tscircuit project template: PCB designs are written as React/TSX and compiled by the `tsci` CLI (local binary in `node_modules/.bin/tsci`, from the `tscircuit` package). The entrypoint is `index.circuit.tsx`, which default-exports a function returning a `<board>`. `*.circuit.tsx` files are built automatically. Outputs go to `dist/`. `.tscircuit/` is a cache/autorouter-artifacts dir (gitignored). There is no test suite and no linter. The `tsci` binary's shebang is `env bun`, so Bun must be on PATH. Bun is installed at `~/.bun/bin` and `~/.zshrc` adds it to PATH, but Claude's Bash tool doesn't load `~/.zshrc`, so run `export PATH="$HOME/.bun/bin:$PATH"` first there (otherwise `tsci` fails with "bun: No such file or directory"). Plain `node` can't run `tsci` (a dependency uses directory imports) and `tsx`, the CLI's non-Bun fallback, isn't installed. We chose to keep Bun rather than add `tsx`.
+
+`@tsci/*` packages resolve from the tscircuit registry via `.npmrc`; add them with `tsci add <author/pkg>` (imports look like `@tsci/author.pkg`).
+
+`index.circuit.tsx` currently holds a placeholder (one resistor, one LED, one trace). It is meant to be replaced, together with the README and the images derived from it, when a real project is built from this template.
+
+## Workflow: building a project from README.md
+
+`README.md` is the brief. When asked to build or design the project:
+
+1. Read the **Requirements** section. If any bullet is still `TODO` or ambiguous (power input, board size, connectors, key values), ask the user before designing. Don't invent power rails, board outline, connectors or mounting holes.
+2. Replace the placeholder in `index.circuit.tsx`. Choose parts (see "Choosing JLCPCB parts" below), compute values (write the calculation into README Design notes), and record each assembled part's `supplierPartNumbers` in the TSX (the TSX is the BOM; no separate BOM in the README).
+3. Iterate with the tiered checks below; fix schematic layout per the schematic rules.
+4. Keep `README.md` current as you go: Status, Design notes (what and why), Decisions (including rejected alternatives), Open questions. Regenerate the embedded images after schematic/layout changes.
+5. Rename for the new project: the README `# title` and the `name` in `package.json`.
+
+Docs-only edits need no checks. Never run `tsci push` or place orders unless explicitly asked. Electrical safety and manufacturability remain the user's responsibility.
+
+## README images
+
+The images at the top of `README.md` are the schematic SVG `__snapshots__/index.circuit-schematic.snap.svg` (regenerate with `npx tsci snapshot --schematic-only -u` after schematic changes) and the PNGs `docs/images/pcb.png` and `docs/images/3d.png` (committed copies of `tsci build` output, since `dist/` is gitignored; regenerate with `npm run export:images` after layout changes). The PCB SVG snapshot is not embedded; it only serves as the baseline for `tsci snapshot --test`.
+
+## Commands
+
+- `npm start` — `tsci dev`, interactive preview server (interactive visual feedback only; prefer `tsci build` for iteration)
+- `npm run check:fast` — `tsc --noEmit`; the only JS-level check (no linter or tests), catches wrong prop names/types. `check:wiring` adds netlist + schematic-placement; `check:full` adds `tsci build` + `tsci check shorts`
+- `npm run update:skill` — re-installs the vendored `.claude/skills/tscircuit/` from upstream (`tscircuit/skill`); never edit that folder by hand. `npm run update:llms` fetches the docs dump
+- `npx tsci build [file]` — compile and validate; auto-detects `index.circuit.tsx` or `mainEntrypoint` in `tscircuit.config.ts`. Add `--pcb-png` or `--all-images` for renders
+- `npx tsci snapshot [--pcb-only|--3d]` — regenerate visuals; `--test` fails on visual diffs without overwriting
+- `npx tsci export <file> -f <format>` — `schematic-svg`, `pcb-svg`, `readable-netlist`, `specctra-dsn`, `gltf`/`glb`, `kicad-library`
+- `npx tsci search [--jlcpcb|--digikey|--mouser|--kicad|--tscircuit] "<query>"` and `npx tsci import "<part>"` — find and import parts (DigiKey/Mouser are discovery only; import works for JLCPCB and the registry)
+- Run `npx tsci <cmd> --help` rather than guessing flags.
+
+Check order (each stage gates the next):
+1. `tsci check netlist` -> 2. `tsci check schematic-placement` -> 3. `tsci snapshot` + `tsci check placement [file] [refdes]` -> 4. `tsci check routing-difficulty` -> 5. `tsci build` -> 6. `tsci check shorts` (after routing; any short exits 1 and writes `checks/check-shorts/`; fix, don't dismiss). Don't finalize until schematic-placement and placement are clean. DRC errors can be ignored early on. For routing problems, use `tsci build --autorouter-debug --autorouter-debug-dir dist/autorouter-debug`.
+
+When to run checks (tiered, not everything every time):
+- After every edit to `index.circuit.tsx`: `npm run check:wiring` (check:fast + netlist + schematic-placement; must stay clean).
+- After layout/footprint/position changes: also `npm run export:images` (the README embeds the committed PNGs) and `npx tsci snapshot --pcb-only -u`; after `sch*` or schematic changes use `npx tsci snapshot --schematic-only -u` (the README embeds that SVG), `tsci check placement` and `tsci check routing-difficulty`.
+- Before committing a design change and before fab: `npm run check:full` (check:wiring + `tsci build` + `tsci check shorts`). Before ordering only: `npm run export:gerbers`.
+- Schematic SVG export (`tsci export -f schematic-svg`) is for inspecting schematic changes, not a gate.
+
+## Conventions and rules
+
+- Detailed guidance lives in the bundled skill: `.claude/skills/tscircuit/` (SKILL.md, CLI.md, SYNTAX.md, WORKFLOW.md, CHECKLIST.md, FOOTPRINTS.md, per-element docs in `elements/`, templates in `templates/`).
+- Don't invent JSX props or CLI flags; confirm in `elements/*.md` or `--help`. Learn from https://docs.tscircuit.com/ before writing or changing circuit code, not only for what the skill doesn't cover. `https://docs.tscircuit.com/llms.txt` (same as `ai.txt`) is the whole docs set as one ~870 KB Repomix dump: run `npm run update:llms` to save it as `docs/llms.txt` (gitignored) and grep that file, never load it whole. The skill comes from https://github.com/tscircuit/skill (`npx skills add tscircuit/skill`).
+- Define `pinLabels` and `pinAttributes` on chips before wiring traces. Reference pins by label (`U1.VCC`, `net.GND`).
+- Prefer a footprinter string (`footprint="0603"`) over a custom `<footprint>`; read FOOTPRINTS.md before writing custom footprints. Exception: for a JLCPCB-specific part, `footprint="jlcpcb:..."` fetches from EasyEDA at build time and fails on HTTP 403 rate limits, so define a local `<footprint>` instead (pad geometry copied from the JLCPCB part). Custom footprints get no 3D body, so pass `cadModel={<cadmodel modelUrl={...} />}` with absolute URLs `https://modelcdn.tscircuit.com/jscad_models/<footprinter>.glb`. Don't import local `./models/*.glb`: `tsci build` resolves them but the `tsci dev` 3D viewer 404s on the relative path. Check both `3d.png` and the dev 3D tab after changing.
+- The parts engine is disabled (`tscircuit.config.ts` `platformConfig.partsEngineDisabled`; `build`/`snapshot`/`export` also take `--disable-parts-engine`, `dev` and `check` don't). With it on, every part carrying `supplierPartNumbers` triggers an EasyEDA footprint cross-check that returns HTTP 403 `source_part_not_found_warning`s. A JLCPCB login does not help; tsci uses no JLC credentials. Pin parts via `supplierPartNumbers` yourself (the engine's auto-picking is off). The BOM export only lists parts that carry a supplier part number. The "missing a manufacturer part number" build warnings on the placeholder are expected and go away once parts have `supplierPartNumbers`.
+- For USB-C use `<connector standard="usb_c" />`, not a JLCPCB import.
+- Always keep a `<schematicsheet>`: without one `tsci build` warns "No <schematicsheet> was found" (the warning badge in `tsci dev`). Give it an explicit `sheetWidth`/`sheetHeight` sized to the circuit, because the default A4 frame is huge and shrinks the circuit to a speck in the README image. Parts and labels must sit inside the frame with margin (the build warns "extends outside the drawing area" otherwise; the placeholder needed 70x50mm for two parts), then re-render to check. Every part needs `schSheetName="<sheet name>"`; wrapper components must forward it to the chip.
+- Group schematics with `<schematicsheet>`/`<schematicsection>` once a design has 5+ components. Split the diagram into logical blocks (e.g. power input, core IC, timing network, outputs): give each block its own `schSectionName` and keep its parts clustered by `schX`/`schY`, with a clear gap between blocks.
+- Keep schematic wires from overlapping (the auto-layout can run wires of different nets along the same line, which looks like a false connection). Set `schX`/`schY`/`schRotation` on every part instead of trusting auto-placement, then render with `tsci export index.circuit.tsx -f schematic-svg -o <scratchpad>/x.svg` and look at it (`rsvg-convert -w 4000` to PNG, crop). Fix by: rotating parts so pin1/pin2 face their neighbours, reordering `schPinArrangement` so pins that share a net sit on the same side and in the order of the parts they connect to, spacing clusters apart, and checking `tsci check schematic-placement` hints. A hop mark where wires cross is fine; a dot or shared segment between different nets is not. Swapping two pins in `schPinArrangement` only redraws the symbol (netlist and PCB unchanged).
+- Same-net pins closer than `schMaxTraceDistance` (5 schematic units when set on the board) get an auto-drawn wire between them, even across blocks. To keep a separate block (e.g. a power input) connected by net labels only, place it more than ~5 units from every pin of those nets in the main block, directly below/beside it without widening the picture needlessly.
+- `tsci check schematic-placement` hints like `TwoPinComponentCouldBeFlipped` count wire turns only and can make the drawing worse. Render before applying a hint; an unapplied hint is informational (the check still exits 0).
+- `tsci snapshot --schematic-only` does not overwrite a changed snapshot ("Run with --update to fix"): pass `-u`. `tsci build` also warns on unnamed `<trace>`s and prints "Could not save autorouting paths…" on every run; neither blocks the build.
+- Schematic wire vs label: a `net.X` trace always draws as a label stub, and a named direct trace (`name="..."`) draws a flag. To show a real wire, connect the pins directly (pin to pin). Board `schTraceAutoLabelEnabled` + `schMaxTraceDistance` (e.g. 5) turns long runs into labels; a large distance (20) draws every power net as one long tangle. Only change `sch*` props for layout work, so the netlist and PCB snapshot stay unchanged (verify with `tsci snapshot --pcb-only --test`).
+- Choosing JLCPCB parts: query `https://jlcsearch.tscircuit.com/<category>/list.json` (e.g. `resistors/list.json?package=0603&is_basic=true&is_preferred=&resistance=22000`), prefer basic parts, pick the highest stock, and record the choice as `supplierPartNumbers={{ jlcpcb: ["C..."] }}` on the part in the TSX. Only the `resistors` endpoint has been confirmed; check other categories before relying on them. Also use https://tscircuit.com/datasheets to discover elements/parts (not yet explored; check what it offers first). Not needed until a design actually needs parts.
+- Assembly is ordered as JLCPCB **Economic** (unless the README Requirements say otherwise): only use parts whose jlcpcb.com part page (`https://jlcpcb.com/partdetail/C<number>`, text "PCBA Type") says "Economic and Standard", never "Standard Only". jlcsearch does not expose this flag, so check the page (e.g. with the browser tool) before choosing or swapping a part.
+- Through-hole parts that are hand-soldered (e.g. headers) get `doNotPlace` so they stay out of the JLCPCB BOM/CPL.
+- Fabrication outputs (Gerbers/BOM/PnP): `npm run export:gerbers` writes `dist/gerbers.zip` (the zip holds Gerbers, drills, `bom.csv` and `pick_and_place.csv`). The `tsci dev` export UI also works. `tsci export` warns "cannot verify jlcpcb pick-and-place rotation" for SMD parts, so rotations in `pick_and_place.csv` need a human check in JLCPCB's assembly preview before ordering.
