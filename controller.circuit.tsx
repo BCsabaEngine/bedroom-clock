@@ -4,8 +4,8 @@ import { via } from './lib/SevenSegDigit';
 
 // Controller board of the bedroom clock: ESP32-S3 SuperMini at the left edge (USB-C end towards it, 1.25 mm edge margin like the DFPlayer, antenna end towards the board centre) and the DFPlayer (HW-247A, 16P)
 // on the same baseline (bottom pin rows level), 5V in, AMS1117-3.3 for the ESP32 above the module, 74AHCT1G125 level shifter + 330R for the WS2812 data line, the speaker pads, a snooze button input and four 3.5mm corner holes. See README.md.
-// Mounting holes (rule 16): a free circle of 6 mm (5.5 mm screw head) around each; no part or pad inside, traces may run through.
-// Layout follows DESIGN.md (alignment rules): everything sits on a 1.27 mm grid (`g(n)` = n grid units), origin = board centre, x right, y up. Every connector sits in one row along the bottom edge.
+// Mounting holes (rule 18): a free circle of 6 mm (5.5 mm screw head) around each; no part or pad inside, traces may run through.
+// Layout follows the shared DESIGN.md rules (agentic-pcb/example-base, not copied here): everything sits on a 1.27 mm grid (`g(n)` = n grid units), origin = board centre, x right, y up. Every connector sits in one row along the bottom edge.
 const SHEET = 'Controller';
 const G = 1.27;
 const g = (n: number) => Math.round(n * G * 1e4) / 1e4;
@@ -91,7 +91,7 @@ const inFrame =
     const dy = p.y - y;
     return { ...p, x: Math.round((dx * Math.cos(a) + dy * Math.sin(a)) * 1e4) / 1e4, y: Math.round((-dx * Math.sin(a) + dy * Math.cos(a)) * 1e4) / 1e4 };
   };
-// Explicit copper (rule 26: corners are cut to 45 deg with `chamfer`/`wire45` below, never drawn as 90 deg): `pts` are board coordinates of the corners between the `from` pad and the `to` pad (`via(p)` switches layer), `owner` is the component of the `from` port.
+// Explicit copper (rule 17: corners are cut to 45 deg with `chamfer`/`wire45` below, never drawn as 90 deg): `pts` are board coordinates of the corners between the `from` pad and the `to` pad (`via(p)` switches layer), `owner` is the component of the `from` port.
 const wire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = 0.25) => <trace name={name} from={`.${from}`} to={`.${to}`} pcbPath={pts.map(inFrame(owner))} thickness={`${thickness}mm`} />;
 // A layer change at p: a wire point on both sides of the via (needed in a pcbPath).
 const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'bottom'): Pt[] => [p, via(p, from, to), p];
@@ -99,7 +99,7 @@ const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'botto
 const gndTrace = (port: string) => <trace from={`.${port}`} to="net.GND" />;
 const gndWire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = GND_W) => wire(name, from, to, owner, pts, thickness);
 const pt = (x: number, y: number): P => ({ x, y });
-// No 90 deg corners (DESIGN.md rule 26): each one becomes two 45 deg bends, a T junction stays sharp. `poly` = pad centre, corners (board coordinates, orthogonal segments), pad centre; `c` = cut length (one number, or one per vertex index of `poly`); corner indices in `keep` are T junctions.
+// No 90 deg corners (DESIGN.md rule 17): each one becomes two 45 deg bends, a T junction stays sharp. `poly` = pad centre, corners (board coordinates, orthogonal segments), pad centre; `c` = cut length (one number, or one per vertex index of `poly`); corner indices in `keep` are T junctions.
 const chamfer = (poly: P[], c: number | number[] = G, keep: number[] = []): P[] =>
   poly.flatMap((v, i) => {
     if (i === 0 || i === poly.length - 1 || keep.includes(i)) return [v];
@@ -125,13 +125,13 @@ const espAt = (n: number): P => ({ x: ESP.x - espPin(n).y, y: ESP.y + espPin(n).
 const dfAt = (n: number): P => ({ x: DF.x - dfPin(n).y, y: DF.y + dfPin(n).x }); // board position of DFPlayer pin n (module rotated by 90 deg)
 const GND_W = 0.8; // every 5V/GND trace is as wide as the 5V traces (0.8 mm, more than double the 0.25 mm of a signal, rule 14)
 const U3 = { x: g(-14), y: g(13) }; // AMS1117, rot 0: pins on the left (GND top, VOUT, VIN bottom), tab (VOUT) on the right
-const C3 = { x: g(-9), y: g(13) }; // 22 uF output capacitor right next to the AMS1117 tab (3V3 on pin1, left; GND on pin2, right, via to the pour); the screw circle of the top left hole (rule 16) leaves no room beside the ESP32 pads
+const C3 = { x: g(-9), y: g(13) }; // 22 uF output capacitor right next to the AMS1117 tab (3V3 on pin1, left; GND on pin2, right, via to the pour); the screw circle of the top left hole (rule 18) leaves no room beside the ESP32 pads
 const U4 = { x: g(-10), y: g(-8) }; // rot 0: left column OE, A, GND, right column VCC, Y; the A line comes from the west, the OE-GND link passes through the channel between the pad columns
 const U4_PAD = { col: 1.137, pitch: 0.95 }; // pad column offset and pitch of the SOT-23-5
 const LINE_Y = U4.y + U4_PAD.pitch; // top-layer 5V line along the VCC pad row from the riser to the level shifter, C4 and J4
 const R2 = { x: g(-8), y: g(-10) };
 const GND_VIA = { dx: -4.82 }; // the one via on a power net: U3 GND (its pad is on the top layer, the through-hole GND pad is out of reach without crossing the 3V3 line) to the bottom pour
-const C4 = { x: g(-7), y: g(-8.5) }; // 100 nF decoupling of U4, 1.1 mm east of its VCC pad (rule 17): 5V from the VCC line straight down to pin 1, GND through a via on its east side
+const C4 = { x: g(-7), y: g(-8.5) }; // 100 nF decoupling of U4, 1.1 mm east of its VCC pad (rule 24): 5V from the VCC line straight down to pin 1, GND through a via on its east side
 const C4_GND_VIA = { x: g(-5), y: C4.y };
 const J4_V5_Y = g(-11.5); // the J4 5V feed leaves the riser foot below the level shifter section (it used to run down at x = J4 5V, through the place of C4)
 const C1 = { x: g(5), y: g(-9) }; // bulk capacitor at the 5V entry (also the input capacitor of the AMS1117)
@@ -263,7 +263,7 @@ export default () => (
     {/* Snooze button input */}
     <connector name="J3" doNotPlace pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }} pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Input" schX={-6} schY={-6} pcbX={J3.x} pcbY={J3.y} footprint={pads(['SNZ', 'GND'], 2.54, SIG)} />
 
-    {/* GND: a bottom copper pour. The through-hole GND pins join it directly, the SMD GND pins run on the top layer to a through-hole GND pad (no via): C1 to J1, U4 GND/OE to J3. U3 GND, C3 GND and C4 GND have a via each (the only ones on a power net; C4 so that it can sit next to U4 VCC, DESIGN.md rule 22) */}
+    {/* GND: a bottom copper pour. The through-hole GND pins join it directly, the SMD GND pins run on the top layer to a through-hole GND pad (no via): C1 to J1, U4 GND/OE to J3. U3 GND, C3 GND and C4 GND have a via each (the only ones on a power net; C4 so that it can sit next to U4 VCC, DESIGN.md rule 24) */}
     <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="0.25mm" />
     {gndTrace('J1 > .GND')}
     {gndTrace('J3 > .GND')}
