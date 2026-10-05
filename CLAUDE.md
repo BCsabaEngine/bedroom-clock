@@ -8,7 +8,7 @@ A tscircuit project template: PCB designs are written as React/TSX and compiled 
 
 `@tsci/*` packages resolve from the tscircuit registry via `.npmrc`; add them with `tsci add <author/pkg>` (imports look like `@tsci/author.pkg`).
 
-`index.circuit.tsx` currently holds a placeholder (one resistor, one LED, one trace). It is meant to be replaced, together with the README and the images derived from it, when a real project is built from this template.
+The project is the bedroom clock (see `README.md`): `index.circuit.tsx` is the LED board (one 7-segment digit of 70 WS2812-type LEDs plus the 3-wire entry). Reusable pieces live in `lib/` (`Ws2812Led`, `LedSegment`, `SevenSegDigit`); they are plain TSX modules, not `*.circuit.tsx`. The digit is routed **explicitly** with `<trace pcbPath>` and `<board routeRemaining={false}>`, not by the autorouter. Gotchas learned there: `pcbPath` points are in the frame of the component owning the trace's `from` port (position + rotation); a via inside a path needs a wire point at the same spot on both sides; capacitors default to a 1 mm decoupling max trace length (`maxDecouplingTraceLength`); there are deliberately no `<group>`s (user asked to flatten them; a group re-lays out its children on the schematic), so parts carry absolute board and schematic coordinates; `<connector>` (not `<chip>`) for J-prefixed parts. Details in the README "How the copper is made".
 
 ## Workflow: building a project from README.md
 
