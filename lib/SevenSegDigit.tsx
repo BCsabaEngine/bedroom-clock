@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 
+import { LEDS_PER_DIGIT, LEDS_PER_SEGMENT, SEGMENT_ORDER } from './ledLayout';
 import { LED_PITCH, LedSegment } from './LedSegment';
 
 // One 7-segment digit in the style of discrete bars: the bars never touch, there is a ~3 mm gap at every corner. The horizontal bars sit
@@ -10,24 +11,24 @@ import { LED_PITCH, LedSegment } from './LedSegment';
 // pcbX/pcbY are the digit origin; no <group> is used, every part is placed at board coordinates. All copper is explicit (pcbPath):
 // inside a bar see LedSegment, between bars see LINKS below. Coordinates below are digit coordinates (x right, y up, mm).
 // Bar positions: horizontals at y = +57.6 / 0 / -57.1 (LED x = -22.5..22.5), verticals at x = +-28.5, upper LEDs y = 6.6..51.6, lower -51.1..-6.1.
-export const SEGMENTS = [
-  { id: 'f', x: -28.5, y: 6.6, rot: 90 },
-  { id: 'a', x: -22.5, y: 57.6, rot: 0 },
-  { id: 'b', x: 28.5, y: 51.6, rot: -90 },
-  { id: 'c', x: 28.5, y: -6.1, rot: -90 },
-  { id: 'd', x: 22.5, y: -57.1, rot: 180 },
-  { id: 'e', x: -28.5, y: -51.1, rot: 90 },
-  { id: 'g', x: -22.5, y: 0, rot: 0 }
-] as const;
-
-export const LEDS_PER_SEGMENT = 10;
-export const LEDS_PER_DIGIT = SEGMENTS.length * LEDS_PER_SEGMENT;
+const GEOMETRY = {
+  f: { x: -28.5, y: 6.6, rot: 90 },
+  a: { x: -22.5, y: 57.6, rot: 0 },
+  b: { x: 28.5, y: 51.6, rot: -90 },
+  c: { x: 28.5, y: -6.1, rot: -90 },
+  d: { x: 22.5, y: -57.1, rot: 180 },
+  e: { x: -28.5, y: -51.1, rot: 90 },
+  g: { x: -22.5, y: 0, rot: 0 }
+} as const;
+// Chain order and LED counts come from lib/ledLayout.ts (also the source of the C++ helper); LINKS below is written for exactly that order.
+export const SEGMENTS = SEGMENT_ORDER.map((id) => ({ id, ...GEOMETRY[id] }));
+export { LEDS_PER_DIGIT, LEDS_PER_SEGMENT };
 
 type P = { x: number; y: number };
 const rotate = (deg: number, x: number, y: number): P => ({ x: x * Math.cos((deg * Math.PI) / 180) - y * Math.sin((deg * Math.PI) / 180), y: x * Math.sin((deg * Math.PI) / 180) + y * Math.cos((deg * Math.PI) / 180) });
 
 // pcbPath points are given in the frame of the component owning the trace's `from` port: convert digit coordinates into LED k's frame (LED k sits on its bar, rotated 180deg).
-const toLed = (k: number) => {
+export const toLed = (k: number) => {
   const s = SEGMENTS[Math.floor(k / LEDS_PER_SEGMENT)];
   const c = rotate(s.rot, (k % LEDS_PER_SEGMENT) * LED_PITCH, 0);
   return ({ x, y }: P) => rotate(-(s.rot + 180), x - (s.x + c.x), y - (s.y + c.y));
