@@ -1,6 +1,6 @@
 # Design rules
 
-Schematic and PCB rules for the **controller board** (`controller.circuit.tsx`): alignment (1-13), routing (14-15), mounting (16), schematic (17-18) and placement (19-25). They do **not** apply to the digit panel (`seven-segment-display.circuit.tsx`, whose layout is fixed by the LED geometry in `lib/ledLayout.ts`) or to the `lib/` modules it uses. Where two rules pull against each other the electrical one wins (decoupling, rule 22, over via avoidance, rule 15, and over equal spacing, rules 10 and 11); the table at the end records every such exception.
+Schematic and PCB rules for the **controller board** (`controller.circuit.tsx`): alignment (1-13), routing (14-15 and 26), mounting (16), schematic (17-18) and placement (19-25). Rule 26 (corners) was added last and is listed with the routing rules; the numbers of the others did not change. They do **not** apply to the digit panel (`seven-segment-display.circuit.tsx`, whose layout is fixed by the LED geometry in `lib/ledLayout.ts`) or to the `lib/` modules it uses. Where two rules pull against each other the electrical one wins (decoupling, rule 22, over via avoidance, rule 15, and over equal spacing, rules 10 and 11); the table at the end records every such exception.
 
 ## Alignment rules
 
@@ -22,6 +22,7 @@ Schematic and PCB rules for the **controller board** (`controller.circuit.tsx`):
 
 14. **Double width for power lines:** Draw the power lines (5V, GND) at least twice as wide as the standard (signal) trace.
 15. **Avoid vias on power lines:** Try not to use vias on the power lines (5V, GND); route them on one layer where possible. A via at the GND pad of a decoupling capacitor or of a regulator is accepted when the alternative is a longer path (rule 22 wins).
+26. **Avoid 90 degree corners:** Try not to turn a trace by 90 degrees; make every corner two 45 degree bends instead. A T junction (a trace joining another one) is allowed. A short cut (down to 0.3 mm) where a pad is close, or a bend inside a pad, is accepted. In `controller.circuit.tsx` the `chamfer()`/`wire45()` helpers do this.
 
 ## Mounting rules
 
@@ -44,7 +45,7 @@ Schematic and PCB rules for the **controller board** (`controller.circuit.tsx`):
 
 ## Controller board status
 
-Audited against rules 1..25 on `controller.circuit.tsx` (board 60.31 x 41.28 mm, grid origin = 0.625 mm right of the board centre (the outline is offset with `outlineOffsetX`), `g(n)` = n x 1.27 mm in the TSX). Numbers measured from `dist/controller/circuit.json`.
+Audited against rules 1..26 on `controller.circuit.tsx` (board 60.31 x 41.28 mm, grid origin = 0.625 mm right of the board centre (the outline is offset with `outlineOffsetX`), `g(n)` = n x 1.27 mm in the TSX). Numbers measured from `dist/controller/circuit.json`.
 
 | # | Status | How |
 | --- | --- | --- |
@@ -73,5 +74,6 @@ Audited against rules 1..25 on `controller.circuit.tsx` (board 60.31 x 41.28 mm,
 | 23 | n/a | No crystal on the board (the modules carry their own). |
 | 24 | exception | Pads and SMD parts: `U3` GND pad 1.08 mm from the top edge (0.19 mm short, same cause as rule 2); the ESP32 23.5 mm outline is 1.25 mm from the left edge and the DFPlayer 21 mm outline 1.25 mm from the right edge (0.02 mm short each, nominal vendor outlines; their pads are 2.04 / 2.06 mm); the connector pads are 2.93 mm and the pad labels 1.64 mm from the bottom edge, everything else further. |
 | 25 | exception | Only `U3` (AMS1117, SOT-223) is warm: (5 V - 3.3 V) x the ESP32-S3 draw of roughly 0.1-0.2 A typical (Wi-Fi bursts above 0.3 A) is about 0.2-0.35 W (an estimate, not measured). Its tab is a 2 x 3.8 mm pad with a 0.6 mm trace, in the open top left corner; there is no dedicated pour or thermal via (the bottom layer is the GND pour, so the VOUT tab cannot use it). If the regulator runs hot: add a V33 `copperpour` with an `outline` round the tab on the top layer. |
+| 26 | pass | Every corner is two 45 degree bends, written with `chamfer()`/`wire45()` in `controller.circuit.tsx` (cut 1.27 mm, smaller where a pad is close: 0.9 mm at the UART pins, 0.7 / 0.5 mm at the `U4` pads, 0.3 mm in the `U4` channel between its pad columns). Measured on `dist/controller/circuit.json`: the only 90 degree turns left are T junctions on the 5V riser (`V5` branches, `V5_C4`) and the end of the `U3` VIN feed inside its pad (0.24 mm jog). `SPK1`/`SPK2` were already exact 45 degree diagonals. Vias unchanged (rule 15 row). |
 
 The build prints "routed thinner than requested" for one GND trace (`C1` to `J1`): it compares it with the 0.5 mm `U4` link on the same net. Known and harmless.

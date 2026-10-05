@@ -91,7 +91,7 @@ const inFrame =
     const dy = p.y - y;
     return { ...p, x: Math.round((dx * Math.cos(a) + dy * Math.sin(a)) * 1e4) / 1e4, y: Math.round((-dx * Math.sin(a) + dy * Math.cos(a)) * 1e4) / 1e4 };
   };
-// Explicit copper: `pts` are board coordinates of the corners between the `from` pad and the `to` pad (`via(p)` switches layer), `owner` is the component of the `from` port.
+// Explicit copper (rule 26: corners are cut to 45 deg with `chamfer`/`wire45` below, never drawn as 90 deg): `pts` are board coordinates of the corners between the `from` pad and the `to` pad (`via(p)` switches layer), `owner` is the component of the `from` port.
 const wire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = 0.25) => <trace name={name} from={`.${from}`} to={`.${to}`} pcbPath={pts.map(inFrame(owner))} thickness={`${thickness}mm`} />;
 // A layer change at p: a wire point on both sides of the via (needed in a pcbPath).
 const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'bottom'): Pt[] => [p, via(p, from, to), p];
@@ -99,6 +99,20 @@ const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'botto
 const gndTrace = (port: string) => <trace from={`.${port}`} to="net.GND" />;
 const gndWire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], thickness = GND_W) => wire(name, from, to, owner, pts, thickness);
 const pt = (x: number, y: number): P => ({ x, y });
+// No 90 deg corners (DESIGN.md rule 26): each one becomes two 45 deg bends, a T junction stays sharp. `poly` = pad centre, corners (board coordinates, orthogonal segments), pad centre; `c` = cut length (one number, or one per vertex index of `poly`); corner indices in `keep` are T junctions.
+const chamfer = (poly: P[], c: number | number[] = G, keep: number[] = []): P[] =>
+  poly.flatMap((v, i) => {
+    if (i === 0 || i === poly.length - 1 || keep.includes(i)) return [v];
+    const a = poly[i - 1];
+    const b = poly[i + 1];
+    const din = { x: Math.sign(v.x - a.x), y: Math.sign(v.y - a.y) };
+    const dout = { x: Math.sign(b.x - v.x), y: Math.sign(b.y - v.y) };
+    if (din.x * dout.x + din.y * dout.y !== 0) return [v];
+    const d = Math.min(Array.isArray(c) ? (c[i] ?? G) : c, Math.hypot(v.x - a.x, v.y - a.y), Math.hypot(b.x - v.x, b.y - v.y));
+    return [pt(v.x - din.x * d, v.y - din.y * d), pt(v.x + dout.x * d, v.y + dout.y * d)];
+  });
+// Like wire(), but the path is the full polyline from pad centre to pad centre and its 90 deg corners are chamfered.
+const wire45 = (name: string, from: string, to: string, owner: Frame, poly: P[], thickness = 0.25, c: number | number[] = G, keep: number[] = []) => wire(name, from, to, owner, chamfer(poly, c, keep).slice(1, -1), thickness);
 
 // Board coordinates of every part (mm). The explicit copper below is written against these.
 const CONN_Y = g(-13); // pad row of J1..J4 along the bottom edge (the lower mounting holes sit on the same line)
@@ -127,6 +141,18 @@ const J3 = { x: g(-16), y: CONN_Y }; // SNZ, GND 2.54 mm to the right
 const J4 = { x: g(-8), y: CONN_Y }; // DATA, 5V, GND 2.54 mm apart to the right (same order as J1 of the digit panels)
 const J1 = { x: V5_X, y: CONN_Y }; // 5V, GND 5.08 mm to the right
 const J2 = { x: g(16), y: CONN_Y }; // SPK+ here, SPK- 5.08 mm to the left
+// Pad centres of the SMD parts and connector pads (board coordinates) for the 45 deg routing.
+const U3_PAD = { x: U3.x - 3.15, out: U3.y };
+const U4_A = pt(U4.x - U4_PAD.col, U4.y);
+const U4_OE = pt(U4.x - U4_PAD.col, U4.y + U4_PAD.pitch);
+const U4_GND = pt(U4.x - U4_PAD.col, U4.y - U4_PAD.pitch);
+const U4_Y = pt(U4.x + U4_PAD.col, U4.y - U4_PAD.pitch);
+const R2_P1 = pt(R2.x - 0.825, R2.y);
+const R2_P2 = pt(R2.x + 0.825, R2.y);
+const R1_P1 = pt(R1.x - 0.825, R1.y);
+const J3_GND = pt(J3.x + 2.54, CONN_Y);
+const J4_DATA = pt(J4.x, CONN_Y);
+const J4_V5 = pt(J4.x + 2.54, CONN_Y);
 
 export default () => (
   <board width={`${W}mm`} height={`${H}mm`} outlineOffsetX={`${BOARD_X}mm`} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
@@ -246,34 +272,39 @@ export default () => (
     {gndTrace('U2 > .GND')}
     {gndTrace('U2 > .GND2')}
 
-    {gndWire('GND_C1', 'C1 > .pin2', 'J1 > .GND', C1, [pt(C1.x + 1.4625, CONN_Y)])}
-    {gndWire('GND_U4_OE', 'U4 > .OE', 'U4 > .GND', U4, [pt(U4.x, LINE_Y), pt(U4.x, U4.y - U4_PAD.pitch)], 0.5)}
-    {gndWire('GND_U4', 'U4 > .GND', 'J3 > .GND', U4, [pt(U4.x, U4.y - U4_PAD.pitch), pt(U4.x, g(-11)), pt(J3.x + 2.54, g(-11))], 0.5)}
+    {gndWire('GND_C1', 'C1 > .pin2', 'J1 > .GND', C1, [pt(C1.x + 1.4625, CONN_Y + (C1.x + 1.4625 - J1.x - 5.08))])}
+    {wire45('GND_U4_OE', 'U4 > .OE', 'U4 > .GND', U4, [U4_OE, pt(U4.x, U4_OE.y), pt(U4.x, U4_GND.y), U4_GND], 0.5, [0, 0.5, 0.3])}
+    {wire45('GND_U4', 'U4 > .GND', 'J3 > .GND', U4, [U4_GND, pt(U4.x, U4_GND.y), pt(U4.x, g(-11)), pt(J3_GND.x, g(-11)), J3_GND], 0.5, [0, 0.3, G, G])}
     <trace name="GND_C3" from=".C3 > .pin2" to="net.GND" pcbPath={hop(pt(C3.x + 2.4, C3.y)).map(inFrame(C3))} thickness={`${GND_W}mm`} />
     <trace name="GND_C4" from=".C4 > .pin2" to="net.GND" pcbPath={hop(C4_GND_VIA).map(inFrame(C4))} thickness={`${GND_W}mm`} />
     <trace name="GND_U3" from=".U3 > .GND" to="net.GND" pcbPath={hop(pt(U3.x + GND_VIA.dx, U3.y + 2.3)).map(inFrame(U3))} thickness={`${GND_W}mm`} />
 
     {/* 5V, top layer: J1 up the corridor (riser) to the line y = TOP_Y west to the AMS1117 input, branches east to the DFPlayer VCC, west along y = LINE_Y to the level shifter and C4 (right next to its VCC pad) and along J4_V5_Y to J4 */}
     {wire('V5', 'J1 > .V5', 'U2 > .VCC', J1, [pt(V5_X, dfAt(1).y)], 0.8)}
-    {wire('V5_U3', 'J1 > .V5', 'U3 > .VIN', J1, [pt(V5_X, TOP_Y), pt(U3.x - 3.15, TOP_Y)], 0.8)}
+    {wire('V5_U3', 'J1 > .V5', 'U3 > .VIN', J1, chamfer([pt(V5_X, CONN_Y), pt(V5_X, TOP_Y), pt(U3_PAD.x, TOP_Y)]).slice(1), 0.8)}
     {wire('V5_C1', 'J1 > .V5', 'C1 > .pin1', J1, [pt(V5_X, C1.y)], 0.8)}
-    {wire('V5_J4', 'J1 > .V5', 'J4 > .V5', J1, [pt(V5_X, J4_V5_Y), pt(J4.x + 2.54, J4_V5_Y)], 0.8)}
+    {wire45('V5_J4', 'J1 > .V5', 'J4 > .V5', J1, [pt(V5_X, CONN_Y), pt(V5_X, J4_V5_Y), pt(J4_V5.x, J4_V5_Y), J4_V5], 0.8, G, [1])}
     {wire('V5_U4', 'J1 > .V5', 'U4 > .VCC', J1, [pt(V5_X, LINE_Y)], 0.8)}
     {wire('V5_C4', 'J1 > .V5', 'C4 > .pin1', J1, [pt(V5_X, LINE_Y), pt(C4.x - 0.825, LINE_Y)], 0.8)}
 
     {/* 3V3: ESP V33 (top row) straight up to the AMS1117 VOUT, the tab is joined to VOUT under the body, output capacitor on the way */}
-    {wire('V33', 'U1 > .V33', 'U3 > .VOUT', ESP_F, [pt(espAt(12).x, U3.y)], 0.6)}
+    {wire45('V33', 'U1 > .V33', 'U3 > .VOUT', ESP_F, [espAt(12), pt(espAt(12).x, U3_PAD.out), pt(U3_PAD.x, U3_PAD.out)], 0.6)}
     {wire('V33_TAB', 'U3 > .VOUT', 'U3 > .TAB', U3, [pt(U3.x, U3.y)], 0.6)}
     {wire('V33_C3', 'U3 > .TAB', 'C3 > .pin1', U3, [pt(C3.x - 1.4, C3.y)], 0.6)}
 
     {/* Signals. ESP IO4 LED data to the level shifter (west of its A pad), IO2 snooze straight down to J3; IO7/IO6 are the DFPlayer RX/TX: two lines east under the module pins, hopping under the 5V riser; speaker to the pads */}
-    {wire('LED_3V3', 'U1 > .IO4', 'U4 > .A', ESP_F, [pt(espAt(6).x, U4.y)])}
-    {wire('LED_5V', 'U4 > .Y', 'R2 > .pin1', U4, [pt(U4.x + U4_PAD.col, R2.y)])}
-    {wire('LED_DATA', 'R2 > .pin2', 'J4 > .DATA', R2, [pt(R2.x + 0.825, CONN_Y + 1.27), pt(J4.x, CONN_Y + 1.27)])}
+    {wire45('LED_3V3', 'U1 > .IO4', 'U4 > .A', ESP_F, [espAt(6), pt(espAt(6).x, U4_A.y), U4_A], 0.25, 0.7)}
+    {wire45('LED_5V', 'U4 > .Y', 'R2 > .pin1', U4, [U4_Y, pt(U4_Y.x, R2_P1.y), R2_P1], 0.25, 0.5)}
+    {wire('LED_DATA', 'R2 > .pin2', 'J4 > .DATA', R2, [pt(R2_P2.x, J4_DATA.y + (R2_P2.x - J4_DATA.x))])}
     {wire('SNOOZE', 'U1 > .IO2', 'J3 > .SNOOZE', ESP_F, [pt(espAt(4).x, g(-9))])}
-    {wire('DFP_RX', 'U1 > .IO7', 'R1 > .pin1', ESP_F, [pt(espAt(9).x, UART_A)])}
-    {wire('DFP_RX_R', 'R1 > .pin2', 'U2 > .RX', R1, [...hop(pt(V5_X - 1.27, UART_A)), ...hop(pt(V5_X + 1.27, UART_A), 'bottom', 'top'), pt(dfAt(2).x, UART_A)])}
-    {wire('DFP_TX', 'U2 > .TX', 'U1 > .IO6', DF, [pt(dfAt(3).x, UART_B), ...hop(pt(V5_X + 1.27, UART_B)), ...hop(pt(V5_X - 1.27, UART_B), 'bottom', 'top'), pt(espAt(8).x, UART_B)])}
+    {wire45('DFP_RX', 'U1 > .IO7', 'R1 > .pin1', ESP_F, [espAt(9), pt(espAt(9).x, UART_A), R1_P1], 0.25, 0.9)}
+    {wire('DFP_RX_R', 'R1 > .pin2', 'U2 > .RX', R1, [...hop(pt(V5_X - 1.27, UART_A)), ...hop(pt(V5_X + 1.27, UART_A), 'bottom', 'top'), ...chamfer([pt(V5_X + 1.27, UART_A), pt(dfAt(2).x, UART_A), dfAt(2)], 0.9).slice(1, -1)])}
+    {wire('DFP_TX', 'U2 > .TX', 'U1 > .IO6', DF, [
+      ...chamfer([dfAt(3), pt(dfAt(3).x, UART_B), pt(V5_X + 1.27, UART_B)]).slice(1, -1),
+      ...hop(pt(V5_X + 1.27, UART_B)),
+      ...hop(pt(V5_X - 1.27, UART_B), 'bottom', 'top'),
+      ...chamfer([pt(V5_X - 1.27, UART_B), pt(espAt(8).x, UART_B), espAt(8)]).slice(1, -1)
+    ])}
     {wire('SPK1', 'U2 > .SPK1', 'J2 > .SPK1', DF, [pt(dfAt(8).x, g(-7)), pt(J2.x, CONN_Y + 1.27)], 0.8)}
     {wire('SPK2', 'U2 > .SPK2', 'J2 > .SPK2', DF, [pt(dfAt(6).x, g(-7)), pt(J2.x - 5.08, CONN_Y + 1.27)], 0.8)}
 
