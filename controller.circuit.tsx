@@ -2,15 +2,20 @@ import { Fragment } from 'react';
 
 import { via } from './lib/SevenSegDigit';
 
-// Controller board of the bedroom clock: ESP32-S3 SuperMini on the left edge (USB-C flush with the board edge so the plug is reachable, antenna end towards the board centre) and the DFPlayer (HW-247A, 16P)
+// Controller board of the bedroom clock: ESP32-S3 SuperMini at the left edge (USB-C end towards it, 1.25 mm edge margin like the DFPlayer, antenna end towards the board centre) and the DFPlayer (HW-247A, 16P)
 // on the same baseline (bottom pin rows level), 5V in, AMS1117-3.3 for the ESP32 above the module, 74AHCT1G125 level shifter + 330R for the WS2812 data line, the speaker pads, a snooze button input and four 3.5mm corner holes. See README.md.
+// Mounting holes (rule 16): a free circle of 6 mm (5.5 mm screw head) around each; no part or pad inside, traces may run through.
 // Layout follows DESIGN.md (alignment rules): everything sits on a 1.27 mm grid (`g(n)` = n grid units), origin = board centre, x right, y up. Every connector sits in one row along the bottom edge.
 const SHEET = 'Controller';
 const G = 1.27;
 const g = (n: number) => Math.round(n * G * 1e4) / 1e4;
-const W = 59.06; // 46.5 grid units: the USB-C end of the ESP32 is flush with the left edge and its pins are on the grid
+const EDGE_MARGIN = 1.25; // module outline to board edge: the DFPlayer outline (21 mm, centre on the grid) sits this far from the right edge, the ESP32 outline gets the same on the left (its USB-C is on the module top, not at the edge)
+const EDGE_R = g(14) + 10.5 + EDGE_MARGIN; // right board edge (x)
+const EDGE_L = g(-14) - 11.75 - EDGE_MARGIN; // left board edge (x)
+const W = EDGE_R - EDGE_L; // 60.31 mm
 const H = 41.28;
-const HOLE = { d: 3.5, x: g(20), y: g(13) }; // equal inset (4.13 mm) from the four edges, on the grid; the lower holes share the y of the connector row
+const BOARD_X = (EDGE_L + EDGE_R) / 2; // the board centre is not the origin of the part coordinates (those stay on the grid): the board is shifted here with outlineOffsetX
+const HOLE = { d: 3.5, inset: 4.13, y: g(13) }; // equal inset (4.13 mm) from the four edges; the lower holes share the y of the connector row
 
 // Pads: one size per function (DESIGN.md rule 6). Header pads of both modules, signal wire pads (J3, J4), power wire pads (J1, J2).
 const HDR = { drill: 1, pad: 1.6 };
@@ -28,7 +33,7 @@ const ESP_LEN = 23.5;
 const ESP_WID = 18;
 const ESP_LABELS = { pin1: 'TX', pin2: 'RX', pin3: 'IO1', pin4: 'IO2', pin5: 'IO3', pin6: 'IO4', pin7: 'IO5', pin8: 'IO6', pin9: 'IO7', pin10: 'V5', pin11: 'GND', pin12: 'V33', pin13: 'IO13', pin14: 'IO12', pin15: 'IO11', pin16: 'IO10', pin17: 'IO9', pin18: 'IO8' } as const;
 const BASE = g(-4); // y of the bottom pin rows of both modules (the common baseline)
-const ESP = { x: -W / 2 + ESP_LEN / 2, y: BASE + ESP_ROW / 2 };
+const ESP = { x: g(-14), y: BASE + ESP_ROW / 2 };
 const espPin = (n: number) => ({ x: n <= 9 ? -ESP_ROW / 2 : ESP_ROW / 2, y: 4 * ESP_PITCH - ((n - 1) % 9) * ESP_PITCH });
 
 // DFPlayer Mini style module (HW-247A, DFPlayer-16P): two rows of 8 pins, 2.54 mm pitch, rows 15.24 mm apart, body about 21 x 21 mm. Left row top to bottom VCC, RX, TX, DAC_R, DAC_L, SPK_2, GND, SPK_1; right row bottom to top IO1, GND, IO2, ADKEY1, ADKEY2, USB+, USB-, BUSY.
@@ -106,13 +111,15 @@ const espAt = (n: number): P => ({ x: ESP.x - espPin(n).y, y: ESP.y + espPin(n).
 const dfAt = (n: number): P => ({ x: DF.x - dfPin(n).y, y: DF.y + dfPin(n).x }); // board position of DFPlayer pin n (module rotated by 90 deg)
 const GND_W = 0.8; // every 5V/GND trace is as wide as the 5V traces (0.8 mm, more than double the 0.25 mm of a signal, rule 14)
 const U3 = { x: g(-14), y: g(13) }; // AMS1117, rot 0: pins on the left (GND top, VOUT, VIN bottom), tab (VOUT) on the right
-const C3 = { x: g(-19), y: g(10.5) }; // 22 uF between the ESP32 GND pin (pin1 here, left) and the 3V3 line (pin2, right); half a grid unit up: the window between the ESP32 pads and the mounting hole is only 1.2 mm
+const C3 = { x: g(-9), y: g(13) }; // 22 uF output capacitor right next to the AMS1117 tab (3V3 on pin1, left; GND on pin2, right, via to the pour); the screw circle of the top left hole (rule 16) leaves no room beside the ESP32 pads
 const U4 = { x: g(-10), y: g(-8) }; // rot 0: left column OE, A, GND, right column VCC, Y; the A line comes from the west, the OE-GND link passes through the channel between the pad columns
 const U4_PAD = { col: 1.137, pitch: 0.95 }; // pad column offset and pitch of the SOT-23-5
 const LINE_Y = U4.y + U4_PAD.pitch; // top-layer 5V line along the VCC pad row from the riser to the level shifter, C4 and J4
 const R2 = { x: g(-8), y: g(-10) };
 const GND_VIA = { dx: -4.82 }; // the one via on a power net: U3 GND (its pad is on the top layer, the through-hole GND pad is out of reach without crossing the 3V3 line) to the bottom pour
-const C4 = { x: g(-4), y: g(-9) };
+const C4 = { x: g(-7), y: g(-8.5) }; // 100 nF decoupling of U4, 1.1 mm east of its VCC pad (rule 17): 5V from the VCC line straight down to pin 1, GND through a via on its east side
+const C4_GND_VIA = { x: g(-5), y: C4.y };
+const J4_V5_Y = g(-11.5); // the J4 5V feed leaves the riser foot below the level shifter section (it used to run down at x = J4 5V, through the place of C4)
 const C1 = { x: g(5), y: g(-9) }; // bulk capacitor at the 5V entry (also the input capacitor of the AMS1117)
 const R1 = { x: g(-3), y: UART_A }; // in the UART line near its source (ESP IO7), west of the riser
 // Connector groups on the grid, 6 grid units (7.62 mm) between the nearest pads of two groups: J3 (snooze, signal), J4 (LED output, signal), J1 (power in), J2 (speaker).
@@ -122,7 +129,7 @@ const J1 = { x: V5_X, y: CONN_Y }; // 5V, GND 5.08 mm to the right
 const J2 = { x: g(16), y: CONN_Y }; // SPK+ here, SPK- 5.08 mm to the left
 
 export default () => (
-  <board width={`${W}mm`} height={`${H}mm`} thickness="1.6mm" routeRemaining={false} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
+  <board width={`${W}mm`} height={`${H}mm`} outlineOffsetX={`${BOARD_X}mm`} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
     <schematicsheet name={SHEET} displayName="Controller" sheetIndex={0} sheetWidth="260mm" sheetHeight="180mm" />
 
     <schematicsection name="MCU" displayName="ESP32-S3" />
@@ -138,10 +145,15 @@ export default () => (
       manufacturerPartNumber="ESP32-S3 SuperMini"
       pinLabels={ESP_LABELS}
       pinAttributes={{ GND: { requiresGround: true }, V33: { requiresPower: true } }}
-      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['IO2', 'IO4', 'IO5', 'IO8', 'IO12', 'TX', 'RX', 'IO1', 'IO3'] }, rightSide: { direction: 'top-to-bottom', pins: ['V33', 'GND', 'V5', 'IO13', 'IO11', 'IO10', 'IO9', 'IO7', 'IO6'] } }}
+      schPinArrangement={{
+        leftSide: { direction: 'top-to-bottom', pins: ['IO2', 'IO1', 'IO3', 'TX', 'RX', 'IO5', 'IO8', 'IO12'] },
+        rightSide: { direction: 'top-to-bottom', pins: ['IO4', 'IO7', 'IO6', 'IO13', 'IO11', 'IO10', 'IO9'] },
+        topSide: { direction: 'left-to-right', pins: ['V33'] },
+        bottomSide: { direction: 'left-to-right', pins: ['GND', 'V5'] }
+      }}
       schSheetName={SHEET}
       schSectionName="MCU"
-      schX={9}
+      schX={3}
       schY={-5}
       pcbX={ESP.x}
       pcbY={ESP.y}
@@ -166,9 +178,9 @@ export default () => (
       schY={-11}
       pcbX={U3.x}
       pcbY={U3.y}
-      pcbSx={{ '& silkscreentext': { pcbX: '6.35mm', pcbY: '0mm' } }}
+      pcbSx={{ '& silkscreentext': { pcbX: '0mm', pcbY: '3.4mm' } }}
     />
-    <capacitor name="C3" capacitance="22uF" footprint="0805" schSheetName={SHEET} schSectionName="Power" schX={2} schY={-13} schRotation={90} pcbX={C3.x} pcbY={C3.y} supplierPartNumbers={{ jlcpcb: ['C45783'] }} maxDecouplingTraceLength="60mm" />
+    <capacitor name="C3" capacitance="22uF" footprint="0805" schSheetName={SHEET} schSectionName="Power" schX={1.2} schY={-12.6} schRotation={90} pcbX={C3.x} pcbY={C3.y} supplierPartNumbers={{ jlcpcb: ['C45783'] }} maxDecouplingTraceLength="60mm" />
 
     {/* Level shifter: 3.3 V GPIO to 5 V WS2812 data */}
     <chip
@@ -181,13 +193,13 @@ export default () => (
       supplierPartNumbers={{ jlcpcb: ['C7484'] }}
       schSheetName={SHEET}
       schSectionName="LED output"
-      schX={-3}
-      schY={-1}
+      schX={8}
+      schY={0}
       pcbX={U4.x}
       pcbY={U4.y}
     />
-    <capacitor name="C4" capacitance="100nF" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={-1} schY={0.6} schRotation={270} pcbX={C4.x} pcbY={C4.y} supplierPartNumbers={{ jlcpcb: ['C14663'] }} maxDecouplingTraceLength="60mm" />
-    <resistor name="R2" resistance="330" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={0.2} schY={-1.6} pcbX={R2.x} pcbY={R2.y} supplierPartNumbers={{ jlcpcb: ['C23138'] }} />
+    <capacitor name="C4" capacitance="100nF" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={10} schY={1.6} schRotation={270} pcbX={C4.x} pcbY={C4.y} supplierPartNumbers={{ jlcpcb: ['C14663'] }} maxDecouplingTraceLength="60mm" />
+    <resistor name="R2" resistance="330" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={11.2} schY={-0.6} pcbX={R2.x} pcbY={R2.y} supplierPartNumbers={{ jlcpcb: ['C23138'] }} />
     <connector
       name="J4"
       doNotPlace
@@ -195,8 +207,8 @@ export default () => (
       pinAttributes={{ DATA: { mustBeConnected: true }, V5: { requiresPower: true }, GND: { requiresGround: true } }}
       schSheetName={SHEET}
       schSectionName="LED output"
-      schX={3}
-      schY={-1.6}
+      schX={15}
+      schY={-0.6}
       pcbX={J4.x}
       pcbY={J4.y}
       footprint={pads(['DATA', '5V', 'GND'], 2.54, SIG)}
@@ -212,21 +224,21 @@ export default () => (
       schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VCC', 'RX', 'TX', 'BUSY', 'GND', 'GND2'] }, rightSide: { direction: 'top-to-bottom', pins: ['SPK1', 'SPK2', 'DAC_R', 'DAC_L', 'IO1', 'IO2', 'ADKEY1', 'ADKEY2', 'USB_P', 'USB_N'] } }}
       schSheetName={SHEET}
       schSectionName="Audio"
-      schX={15}
-      schY={-4}
+      schX={14}
+      schY={-8}
       pcbX={DF.x}
       pcbY={DF.y}
       pcbRotation={DF.rot}
       footprint={dfFootprint}
     />
-    <resistor name="R1" resistance="1k" footprint="0603" schSheetName={SHEET} schSectionName="Audio" schX={12} schY={-1.5} pcbX={R1.x} pcbY={R1.y} supplierPartNumbers={{ jlcpcb: ['C21190'] }} />
-    <connector name="J2" doNotPlace pinLabels={{ pin1: 'SPK1', pin2: 'SPK2' }} schSheetName={SHEET} schSectionName="Audio" schX={17} schY={-9} pcbX={J2.x} pcbY={J2.y} footprint={pads(['SPK+', 'SPK-'], -5.08, PWR)} />
+    <resistor name="R1" resistance="1k" footprint="0603" schSheetName={SHEET} schSectionName="Audio" schX={9.5} schY={-5.5} pcbX={R1.x} pcbY={R1.y} supplierPartNumbers={{ jlcpcb: ['C21190'] }} />
+    <connector name="J2" doNotPlace pinLabels={{ pin1: 'SPK1', pin2: 'SPK2' }} schSheetName={SHEET} schSectionName="Audio" schX={17.5} schY={-12} pcbX={J2.x} pcbY={J2.y} footprint={pads(['SPK+', 'SPK-'], -5.08, PWR)} />
 
     {/* Snooze button input */}
     <connector name="J3" doNotPlace pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }} pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Input" schX={-6} schY={-6} pcbX={J3.x} pcbY={J3.y} footprint={pads(['SNZ', 'GND'], 2.54, SIG)} />
 
-    {/* GND: a bottom copper pour. The through-hole GND pins join it directly, the SMD GND pins run on the top layer to a through-hole GND pad (no via): C1 to J1, C4 to J4, U4 GND/OE to J3, C3 to the ESP32 GND pin. U3 GND has a via (the only one on a power net) */}
-    <copperpour connectsTo="net.GND" layer="bottom" />
+    {/* GND: a bottom copper pour. The through-hole GND pins join it directly, the SMD GND pins run on the top layer to a through-hole GND pad (no via): C1 to J1, U4 GND/OE to J3. U3 GND, C3 GND and C4 GND have a via each (the only ones on a power net; C4 so that it can sit next to U4 VCC, DESIGN.md rule 22) */}
+    <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="0.25mm" />
     {gndTrace('J1 > .GND')}
     {gndTrace('J3 > .GND')}
     {gndTrace('J4 > .GND')}
@@ -235,24 +247,24 @@ export default () => (
     {gndTrace('U2 > .GND2')}
 
     {gndWire('GND_C1', 'C1 > .pin2', 'J1 > .GND', C1, [pt(C1.x + 1.4625, CONN_Y)])}
-    {gndWire('GND_C4', 'C4 > .pin2', 'J4 > .GND', C4, [pt(C4.x + 0.825, CONN_Y)])}
-    {gndWire('GND_C3', 'C3 > .pin1', 'U1 > .GND', C3, [pt(espAt(11).x, C3.y)])}
     {gndWire('GND_U4_OE', 'U4 > .OE', 'U4 > .GND', U4, [pt(U4.x, LINE_Y), pt(U4.x, U4.y - U4_PAD.pitch)], 0.5)}
     {gndWire('GND_U4', 'U4 > .GND', 'J3 > .GND', U4, [pt(U4.x, U4.y - U4_PAD.pitch), pt(U4.x, g(-11)), pt(J3.x + 2.54, g(-11))], 0.5)}
+    <trace name="GND_C3" from=".C3 > .pin2" to="net.GND" pcbPath={hop(pt(C3.x + 2.4, C3.y)).map(inFrame(C3))} thickness={`${GND_W}mm`} />
+    <trace name="GND_C4" from=".C4 > .pin2" to="net.GND" pcbPath={hop(C4_GND_VIA).map(inFrame(C4))} thickness={`${GND_W}mm`} />
     <trace name="GND_U3" from=".U3 > .GND" to="net.GND" pcbPath={hop(pt(U3.x + GND_VIA.dx, U3.y + 2.3)).map(inFrame(U3))} thickness={`${GND_W}mm`} />
 
-    {/* 5V, top layer: J1 up the corridor (riser) to the line y = TOP_Y west to the AMS1117 input, branches east to the DFPlayer VCC and west along y = LINE_Y to the level shifter, C4 and J4 */}
+    {/* 5V, top layer: J1 up the corridor (riser) to the line y = TOP_Y west to the AMS1117 input, branches east to the DFPlayer VCC, west along y = LINE_Y to the level shifter and C4 (right next to its VCC pad) and along J4_V5_Y to J4 */}
     {wire('V5', 'J1 > .V5', 'U2 > .VCC', J1, [pt(V5_X, dfAt(1).y)], 0.8)}
     {wire('V5_U3', 'J1 > .V5', 'U3 > .VIN', J1, [pt(V5_X, TOP_Y), pt(U3.x - 3.15, TOP_Y)], 0.8)}
     {wire('V5_C1', 'J1 > .V5', 'C1 > .pin1', J1, [pt(V5_X, C1.y)], 0.8)}
-    {wire('V5_J4', 'J1 > .V5', 'J4 > .V5', J1, [pt(V5_X, LINE_Y), pt(J4.x + 2.54, LINE_Y)], 0.8)}
+    {wire('V5_J4', 'J1 > .V5', 'J4 > .V5', J1, [pt(V5_X, J4_V5_Y), pt(J4.x + 2.54, J4_V5_Y)], 0.8)}
     {wire('V5_U4', 'J1 > .V5', 'U4 > .VCC', J1, [pt(V5_X, LINE_Y)], 0.8)}
     {wire('V5_C4', 'J1 > .V5', 'C4 > .pin1', J1, [pt(V5_X, LINE_Y), pt(C4.x - 0.825, LINE_Y)], 0.8)}
 
     {/* 3V3: ESP V33 (top row) straight up to the AMS1117 VOUT, the tab is joined to VOUT under the body, output capacitor on the way */}
     {wire('V33', 'U1 > .V33', 'U3 > .VOUT', ESP_F, [pt(espAt(12).x, U3.y)], 0.6)}
     {wire('V33_TAB', 'U3 > .VOUT', 'U3 > .TAB', U3, [pt(U3.x, U3.y)], 0.6)}
-    {wire('V33_C3', 'U1 > .V33', 'C3 > .pin2', ESP_F, [pt(espAt(12).x, C3.y)], 0.6)}
+    {wire('V33_C3', 'U3 > .TAB', 'C3 > .pin1', U3, [pt(C3.x - 1.4, C3.y)], 0.6)}
 
     {/* Signals. ESP IO4 LED data to the level shifter (west of its A pad), IO2 snooze straight down to J3; IO7/IO6 are the DFPlayer RX/TX: two lines east under the module pins, hopping under the 5V riser; speaker to the pads */}
     {wire('LED_3V3', 'U1 > .IO4', 'U4 > .A', ESP_F, [pt(espAt(6).x, U4.y)])}
@@ -265,10 +277,10 @@ export default () => (
     {wire('SPK1', 'U2 > .SPK1', 'J2 > .SPK1', DF, [pt(dfAt(8).x, g(-7)), pt(J2.x, CONN_Y + 1.27)], 0.8)}
     {wire('SPK2', 'U2 > .SPK2', 'J2 > .SPK2', DF, [pt(dfAt(6).x, g(-7)), pt(J2.x - 5.08, CONN_Y + 1.27)], 0.8)}
 
-    {[-1, 1].flatMap((sx) =>
+    {[EDGE_L + HOLE.inset, EDGE_R - HOLE.inset].flatMap((hx) =>
       [-1, 1].map((sy) => (
-        <Fragment key={`${sx}${sy}`}>
-          <hole diameter={`${HOLE.d}mm`} pcbX={sx * HOLE.x} pcbY={sy * HOLE.y} />
+        <Fragment key={`${hx}${sy}`}>
+          <hole diameter={`${HOLE.d}mm`} pcbX={hx} pcbY={sy * HOLE.y} />
         </Fragment>
       ))
     )}
