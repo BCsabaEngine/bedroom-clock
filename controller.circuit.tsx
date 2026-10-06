@@ -3,7 +3,7 @@ import { Fragment } from 'react';
 import { via } from './lib/SevenSegDigit';
 
 // Controller board of the bedroom clock: ESP32-S3 SuperMini at the left edge (USB-C end towards it, 1.25 mm edge margin like the DFPlayer, antenna end towards the board centre) and the DFPlayer (HW-247A, 16P)
-// on the same baseline (bottom pin rows level), 5V in, AMS1117-3.3 for the ESP32 above the module, 74AHCT1G125 level shifter + 330R for the WS2812 data line, the speaker pads, a snooze button input and four 3.5mm corner holes. See README.md.
+// on the same baseline (bottom pin rows level), 5V in, AMS1117-3.3 for the ESP32 above the module, 74AHCT1G125 level shifter + 330R for the WS2812 data line, the speaker pads, a snooze button input, four wire pads on the top edge for an external BH1750 light sensor (GY-302, I2C with two pull-ups) and four 3.5mm corner holes. See README.md.
 // Mounting holes (rule 18): a free circle of 6 mm (5.5 mm screw head) around each; no part or pad inside, traces may run through.
 // Layout follows the shared DESIGN.md rules (agentic-pcb/example-base, not copied here): everything sits on a 1.27 mm grid (`g(n)` = n grid units), origin = board centre, x right, y up. Every connector sits in one row along the bottom edge.
 const SHEET = 'Controller';
@@ -152,6 +152,18 @@ const R2_P2 = pt(R2.x + 0.825, R2.y);
 const R1_P1 = pt(R1.x - 0.825, R1.y);
 const J4_DATA = pt(J4.x, CONN_Y);
 const J4_V5 = pt(J4.x + 2.54, CONN_Y);
+// Light sensor (GY-302 BH1750, I2C): four wire pads 5V, GND, SCL, SDA (the GY-302 pin order) in the free strip above the DFPlayer on the top edge row (y of the upper mounting holes). IO8 = SCL, IO9 = SDA. The 4.7k pull-ups sit north of the 5V line y = TOP_Y; both lines hop under that line on the bottom layer (y = I2C.hop), run on the bottom to the pull-up pads, surface at y = I2C.via and run in two lanes above the pad row (SDA the upper one, so the lines do not cross) and drop onto the pad tops.
+const J5 = { x: g(4), y: g(13) };
+const R3 = { x: g(-2), y: g(13) }; // SCL pull-up, pad 1 = 3V3 (west), pad 2 = SCL (east)
+const R4 = { x: g(-5), y: g(13) }; // SDA pull-up
+const I2C = { hop: 12.9, v33: 15.1, scl: 15, sda: 15.6, via: 17.25, laneScl: g(14.5), laneSda: g(15) };
+const C3_P1 = pt(C3.x - 0.9125, C3.y);
+const R3_P1 = pt(R3.x - 0.825, R3.y);
+const R3_P2 = pt(R3.x + 0.825, R3.y);
+const R4_P1 = pt(R4.x - 0.825, R4.y);
+const R4_P2 = pt(R4.x + 0.825, R4.y);
+const J5_SCL = pt(J5.x + 2 * 2.54, J5.y);
+const J5_SDA = pt(J5.x + 3 * 2.54, J5.y);
 
 export default () => (
   <board width={`${W}mm`} height={`${H}mm`} outlineOffsetX={`${BOARD_X}mm`} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
@@ -162,6 +174,7 @@ export default () => (
     <schematicsection name="LED output" displayName="WS2812 data (level shifter)" />
     <schematicsection name="Audio" displayName="DFPlayer and speaker" />
     <schematicsection name="Input" displayName="Snooze button" />
+    <schematicsection name="Sensor" displayName="Light sensor (BH1750)" />
 
     {/* MCU */}
     <chip
@@ -171,8 +184,8 @@ export default () => (
       pinLabels={ESP_LABELS}
       pinAttributes={{ GND: { requiresGround: true }, V33: { requiresPower: true } }}
       schPinArrangement={{
-        leftSide: { direction: 'top-to-bottom', pins: ['IO2', 'IO1', 'IO3', 'TX', 'RX', 'IO5', 'IO8', 'IO12'] },
-        rightSide: { direction: 'top-to-bottom', pins: ['IO4', 'IO7', 'IO6', 'IO13', 'IO11', 'IO10', 'IO9'] },
+        leftSide: { direction: 'top-to-bottom', pins: ['IO9', 'IO8', 'IO2', 'IO1', 'IO3', 'TX', 'RX', 'IO5', 'IO12'] },
+        rightSide: { direction: 'top-to-bottom', pins: ['IO4', 'IO7', 'IO6', 'IO13', 'IO11', 'IO10'] },
         topSide: { direction: 'left-to-right', pins: ['V33'] },
         bottomSide: { direction: 'left-to-right', pins: ['GND', 'V5'] }
       }}
@@ -246,7 +259,7 @@ export default () => (
       manufacturerPartNumber="DFPlayer-16P (HW-247A)"
       pinLabels={DF_LABELS}
       pinAttributes={{ VCC: { requiresPower: true }, GND: { requiresGround: true } }}
-      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VCC', 'RX', 'TX', 'BUSY', 'GND', 'GND2'] }, rightSide: { direction: 'top-to-bottom', pins: ['SPK1', 'SPK2', 'DAC_R', 'DAC_L', 'IO1', 'IO2', 'ADKEY1', 'ADKEY2', 'USB_P', 'USB_N'] } }}
+      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VCC', 'RX', 'TX', 'BUSY', 'GND', 'GND2'] }, rightSide: { direction: 'top-to-bottom', pins: ['SPK2', 'SPK1', 'DAC_R', 'DAC_L', 'IO1', 'IO2', 'ADKEY1', 'ADKEY2', 'USB_P', 'USB_N'] } }}
       schSheetName={SHEET}
       schSectionName="Audio"
       schX={14}
@@ -257,10 +270,39 @@ export default () => (
       footprint={dfFootprint}
     />
     <resistor name="R1" resistance="1k" footprint="0603" schSheetName={SHEET} schSectionName="Audio" schX={9.5} schY={-5.5} pcbX={R1.x} pcbY={R1.y} supplierPartNumbers={{ jlcpcb: ['C21190'] }} />
-    <connector name="J2" doNotPlace pinLabels={{ pin1: 'SPK1', pin2: 'SPK2' }} schSheetName={SHEET} schSectionName="Audio" schX={17.5} schY={-12} pcbX={J2.x} pcbY={J2.y} footprint={pads(['SPK+', 'SPK-'], -5.08, PWR)} />
+    <connector
+      name="J2"
+      doNotPlace
+      pinLabels={{ pin1: 'SPK1', pin2: 'SPK2' }}
+      schSheetName={SHEET}
+      schSectionName="Audio"
+      schPinArrangement={{ topSide: { direction: 'left-to-right', pins: ['SPK1', 'SPK2'] } }}
+      schX={16}
+      schY={-12.5}
+      pcbX={J2.x}
+      pcbY={J2.y}
+      footprint={pads(['SPK+', 'SPK-'], -5.08, PWR)}
+    />
 
     {/* Snooze button input */}
     <connector name="J3" doNotPlace pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }} pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Input" schX={-6} schY={-6} pcbX={J3.x} pcbY={J3.y} footprint={pads(['SNZ', 'GND'], 2.54, SIG)} />
+
+    {/* Light sensor: wire pads for a GY-302 (BH1750, 0x23) on the top edge, I2C pull-ups to 3V3 */}
+    <connector
+      name="J5"
+      doNotPlace
+      pinLabels={{ pin1: 'V5', pin2: 'GND', pin3: 'SCL', pin4: 'SDA' }}
+      pinAttributes={{ V5: { requiresPower: true }, GND: { requiresGround: true }, SCL: { mustBeConnected: true }, SDA: { mustBeConnected: true } }}
+      schSheetName={SHEET}
+      schSectionName="Sensor"
+      schX={-6.5}
+      schY={-1}
+      pcbX={J5.x}
+      pcbY={J5.y}
+      footprint={pads(['5V', 'GND', 'SCL', 'SDA'], 2.54, SIG)}
+    />
+    <resistor name="R3" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={-2.7} schY={1.8} schRotation={270} pcbX={R3.x} pcbY={R3.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
+    <resistor name="R4" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={-4.2} schY={1.8} schRotation={270} pcbX={R4.x} pcbY={R4.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
 
     {/* GND: a bottom copper pour, 1.27 mm from the board edge, with a keep-out under the ESP32 antenna end (DESIGN.md rule 16). The through-hole GND pins join it directly, every SMD GND pad (C1, U4 GND/OE, U3, C3, C4) has its own GND via */}
     <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="1.27mm" />
@@ -268,6 +310,7 @@ export default () => (
     {gndTrace('J1 > .GND')}
     {gndTrace('J3 > .GND')}
     {gndTrace('J4 > .GND')}
+    {gndTrace('J5 > .GND')}
     {gndTrace('U1 > .GND')}
     {gndTrace('U2 > .GND')}
     {gndTrace('U2 > .GND2')}
@@ -307,6 +350,15 @@ export default () => (
     ])}
     {wire('SPK1', 'U2 > .SPK1', 'J2 > .SPK1', DF, [pt(dfAt(8).x, g(-7)), pt(J2.x, CONN_Y + 1.27)], 0.8)}
     {wire('SPK2', 'U2 > .SPK2', 'J2 > .SPK2', DF, [pt(dfAt(6).x, g(-7)), pt(J2.x - 5.08, CONN_Y + 1.27)], 0.8)}
+
+    {/* Light sensor. 5V: the riser continues up to the pad row. 3V3 for the pull-ups: from C3 pin 1 down to y = I2C.v33, east under the pull-ups (T stub up to R4, corner up to R3). I2C: IO9 SDA and IO8 SCL hop under the 5V line to the bottom layer, run east on the bottom (SDA above SCL), surface right above the pull-up pads (via at y = I2C.via, on the vertical of the pad), then two lanes above the pad row: SCL the lower one to the nearer pad, SDA the upper one */}
+    {wire45('V5_J5', 'J1 > .V5', 'J5 > .V5', J1, [pt(V5_X, CONN_Y), pt(V5_X, J5.y), pt(J5.x, J5.y)], 0.8, 1)}
+    {wire45('V33_R4', 'C3 > .pin1', 'R4 > .pin1', C3, [C3_P1, pt(C3_P1.x, I2C.v33), pt(R4_P1.x, I2C.v33), R4_P1], 0.6, 0.7, [2])}
+    {wire45('V33_R3', 'C3 > .pin1', 'R3 > .pin1', C3, [C3_P1, pt(C3_P1.x, I2C.v33), pt(R3_P1.x, I2C.v33), R3_P1], 0.6, 0.7)}
+    {wire('SDA', 'U1 > .IO9', 'R4 > .pin2', ESP_F, [...hop(pt(espAt(17).x, I2C.hop)), ...chamfer([pt(espAt(17).x, I2C.hop), pt(espAt(17).x, I2C.sda), pt(R4_P2.x, I2C.sda), pt(R4_P2.x, I2C.via)], 0.9).slice(1, -1), ...hop(pt(R4_P2.x, I2C.via), 'bottom', 'top')])}
+    {wire45('SDA_J5', 'R4 > .pin2', 'J5 > .SDA', R4, [R4_P2, pt(R4_P2.x, I2C.laneSda), pt(J5_SDA.x, I2C.laneSda), J5_SDA], 0.25, 0.8)}
+    {wire('SCL', 'U1 > .IO8', 'R3 > .pin2', ESP_F, [...hop(pt(espAt(18).x, I2C.hop)), ...chamfer([pt(espAt(18).x, I2C.hop), pt(espAt(18).x, I2C.scl), pt(R3_P2.x, I2C.scl), pt(R3_P2.x, I2C.via)], 0.9).slice(1, -1), ...hop(pt(R3_P2.x, I2C.via), 'bottom', 'top')])}
+    {wire45('SCL_J5', 'R3 > .pin2', 'J5 > .SCL', R3, [R3_P2, pt(R3_P2.x, I2C.laneScl), pt(J5_SCL.x, I2C.laneScl), J5_SCL], 0.25, 0.6)}
 
     {[EDGE_L + HOLE.inset, EDGE_R - HOLE.inset].flatMap((hx) =>
       [-1, 1].map((sy) => (
