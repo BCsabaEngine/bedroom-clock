@@ -13,9 +13,9 @@ const EDGE_MARGIN = 1.25; // module outline to board edge: the DFPlayer outline 
 const EDGE_R = g(14) + 10.5 + EDGE_MARGIN; // right board edge (x)
 const EDGE_L = g(-14) - 11.75 - EDGE_MARGIN; // left board edge (x)
 const W = EDGE_R - EDGE_L; // 60.31 mm
-const H = 41.28;
+const H = 43.82; // 33.02 (26 grid units) between the pad rows + 2 x 5.4: room for the group labels outside the connector rows (rule 43) and the 1.27 mm edge clearance (rule 26)
 const BOARD_X = (EDGE_L + EDGE_R) / 2; // the board centre is not the origin of the part coordinates (those stay on the grid): the board is shifted here with outlineOffsetX
-const HOLE = { d: 3.5, inset: 4.13, y: g(13) }; // equal inset (4.13 mm) from the four edges; the lower holes share the y of the connector row
+const HOLE = { d: 3.5, inset: 4.13, y: g(14) }; // equal inset (4.13 mm) from the four edges (rule 12); the pad rows (J1..J4 bottom, J5 top) are one grid unit further in
 
 // Pads: one size per function (DESIGN.md rule 6). Header pads of both modules, signal wire pads (J3, J4), power wire pads (J1, J2).
 const HDR = { drill: 1, pad: 1.6 };
@@ -23,7 +23,10 @@ const SIG = { drill: 1, pad: 2 };
 const PWR = { drill: 1.2, pad: 2.4 };
 const FONT = 1; // pad labels and module texts
 const DESIGNATOR_SIZE = 0.5; // one smaller size for the designators (rule 7)
-const LABEL_DY = -2; // pad label baseline: the same offset below every connector pad (rule 7)
+const LABEL_DY = 2; // pad label baseline: the same offset outside every connector pad row (rule 7)
+const GROUP_FONT = 1.25; // one size for all group labels, larger than the pin labels (rule 43)
+const GROUP_DY = LABEL_DY + 1.5; // group label 1.5 mm further out than the pin labels
+const GROUP_LINE_DY = LABEL_DY + 0.7; // thin line between the pin labels and the group label, from the first to the last pad
 
 // ESP32-S3 SuperMini, header pins seen from the top with USB-C up: left row TX, RX, IO1..IO7, right row 5V, GND, 3V3, IO13..IO8; pitch 2.54 mm, rows 16.51 mm apart (13 grid units, measured from the vendor drawing, verify with the real board), board about 23.5 x 18 mm.
 // The module is placed rotated by 90 deg (counter-clockwise): USB-C towards -x (the left board edge), antenna end towards the board centre, the TX..IO7 row at the bottom (facing the connectors), the 5V/GND/3V3/IO13..IO8 row at the top.
@@ -47,14 +50,16 @@ const DF = { x: g(14), y: BASE + DF_ROW / 2, rot: 90 };
 const hole = (pin: number | string, x: number, y: number, { drill, pad } = HDR) => <platedhole portHints={[`pin${pin}`]} shape="circle" holeDiameter={`${drill}mm`} outerDiameter={`${pad}mm`} pcbX={`${x}mm`} pcbY={`${y}mm`} />;
 const rect = (w: number, h: number) => <silkscreenrect pcbX="0mm" pcbY="0mm" width={`${w}mm`} height={`${h}mm`} filled={false} strokeWidth="0.15mm" />;
 
+// Module texts and pin 1 marks stay horizontal on the board (rule 7): pcbRotation 360, not 0 (0 counts as unset and the text then follows the module's 90 deg).
 const espFootprint = (
   <footprint>
     {Array.from({ length: 18 }, (_, i) => (
       <Fragment key={i}>{hole(i + 1, espPin(i + 1).x, espPin(i + 1).y)}</Fragment>
     ))}
     {rect(ESP_WID, ESP_LEN)}
-    <silkscreentext text="USB" pcbX="0mm" pcbY={`${ESP_LEN / 2 - 1.2}mm`} fontSize={`${FONT}mm`} />
-    <silkscreentext text="ANT" pcbX="0mm" pcbY={`${-ESP_LEN / 2 + 1.2}mm`} fontSize={`${FONT}mm`} />
+    <silkscreentext text="USB" pcbX="0mm" pcbY={`${ESP_LEN / 2 - 2.2}mm`} pcbRotation={360} fontSize={`${FONT}mm`} />
+    <silkscreentext text="ANT" pcbX="0mm" pcbY={`${-ESP_LEN / 2 + 2.2}mm`} pcbRotation={360} fontSize={`${FONT}mm`} />
+    <silkscreentext text="1" pcbX={`${espPin(1).x + 1.8}mm`} pcbY={`${espPin(1).y}mm`} pcbRotation={360} fontSize={`${FONT * 0.8}mm`} />
   </footprint>
 );
 const dfPin = (n: number) => ({ x: n <= 8 ? -DF_ROW / 2 : DF_ROW / 2, y: n <= 8 ? 3.5 * DF_PITCH - (n - 1) * DF_PITCH : -3.5 * DF_PITCH + (n - 9) * DF_PITCH });
@@ -64,21 +69,27 @@ const dfFootprint = (
       <Fragment key={i}>{hole(i + 1, dfPin(i + 1).x, dfPin(i + 1).y)}</Fragment>
     ))}
     {rect(21, 21)}
-    <silkscreentext text="DFPlayer" pcbX="0mm" pcbY="0mm" fontSize={`${FONT}mm`} />
+    <silkscreentext text="DFPlayer" pcbX="0mm" pcbY="0mm" pcbRotation={360} fontSize={`${FONT}mm`} />
+    <silkscreentext text="1" pcbX={`${dfPin(1).x + 1.8}mm`} pcbY={`${dfPin(1).y}mm`} pcbRotation={360} fontSize={`${FONT * 0.8}mm`} />
   </footprint>
 );
 
-// Row of plated wire pads along the bottom edge, pad 1 at the footprint origin, `pitch` to the right (negative: to the left); every pad has its label on one baseline below the row.
-const pads = (labels: string[], pitch: number, { drill, pad } = SIG) => (
-  <footprint>
-    {labels.map((l, i) => (
-      <Fragment key={l}>
-        {hole(i + 1, i * pitch, 0, { drill, pad })}
-        <silkscreentext text={l} pcbX={`${i * pitch}mm`} pcbY={`${LABEL_DY}mm`} fontSize={`${FONT}mm`} />
-      </Fragment>
-    ))}
-  </footprint>
-);
+// Row of plated wire pads along a board edge, pad 1 at the footprint origin, `pitch` to the right (negative: to the left); every pad has its label on one baseline outside the row (`out` = -1 below the row on the bottom edge, 1 above it on the top edge), the group has one larger label 1.5 mm further out and a thin line from its first to its last pad (rule 43).
+const pads = (group: string, labels: string[], pitch: number, { drill, pad } = SIG, out = -1) => {
+  const last = (labels.length - 1) * pitch;
+  return (
+    <footprint>
+      {labels.map((l, i) => (
+        <Fragment key={l}>
+          {hole(i + 1, i * pitch, 0, { drill, pad })}
+          <silkscreentext text={l} pcbX={`${i * pitch}mm`} pcbY={`${out * LABEL_DY}mm`} fontSize={`${FONT}mm`} />
+        </Fragment>
+      ))}
+      <silkscreenline x1={`${(-Math.sign(pitch) * pad) / 2}mm`} y1={`${out * GROUP_LINE_DY}mm`} x2={`${last + (Math.sign(pitch) * pad) / 2}mm`} y2={`${out * GROUP_LINE_DY}mm`} strokeWidth="0.15mm" />
+      <silkscreentext text={group} pcbX={`${last / 2}mm`} pcbY={`${out * GROUP_DY}mm`} fontSize={`${GROUP_FONT}mm`} />
+    </footprint>
+  );
+};
 
 type P = { x: number; y: number };
 type Pt = P & { via?: boolean };
@@ -156,7 +167,7 @@ const J4_V5 = pt(J4.x + 2.54, CONN_Y);
 const J5 = { x: g(4), y: g(13) };
 const R3 = { x: g(-2), y: g(13) }; // SCL pull-up, pad 1 = 3V3 (west), pad 2 = SCL (east)
 const R4 = { x: g(-5), y: g(13) }; // SDA pull-up
-const I2C = { hop: 12.9, v33: 15.1, scl: 15, sda: 15.6, via: 17.25, laneScl: g(14.5), laneSda: g(15) };
+const I2C = { hop: 12.9, v33: 15.1, scl: 15, sda: 15.6, via: 17.25, laneScl: 18, laneSda: 18.7, tapScl: R3.x + 1.7, tapSda: R4.x + 1.8 };
 const C3_P1 = pt(C3.x - 0.9125, C3.y);
 const R3_P1 = pt(R3.x - 0.825, R3.y);
 const R3_P2 = pt(R3.x + 0.825, R3.y);
@@ -166,7 +177,7 @@ const J5_SCL = pt(J5.x + 2 * 2.54, J5.y);
 const J5_SDA = pt(J5.x + 3 * 2.54, J5.y);
 
 export default () => (
-  <board width={`${W}mm`} height={`${H}mm`} outlineOffsetX={`${BOARD_X}mm`} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
+  <board width={`${W}mm`} height={`${H}mm`} outlineOffsetX={`${BOARD_X}mm`} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} schMaxTraceDistance={4.5} pcbStyle={{ silkscreenFontSize: DESIGNATOR_SIZE, silkscreenTextPosition: 'outside' }}>
     <schematicsheet name={SHEET} displayName="Controller" sheetIndex={0} sheetWidth="260mm" sheetHeight="180mm" />
 
     <schematicsection name="MCU" displayName="ESP32-S3" />
@@ -179,6 +190,7 @@ export default () => (
     {/* MCU */}
     <chip
       name="U1"
+      schPinStyle={{ IO8: { marginTop: 3.3 }, IO2: { marginTop: 1.5 }, IO7: { marginTop: 2 }, IO6: { marginTop: 0.8 } }}
       doNotPlace
       manufacturerPartNumber="ESP32-S3 SuperMini"
       pinLabels={ESP_LABELS}
@@ -200,25 +212,38 @@ export default () => (
     />
 
     {/* Power: 5V in, bulk capacitor, AMS1117-3.3 for the ESP32 */}
-    <connector name="J1" doNotPlace pinLabels={{ pin1: 'V5', pin2: 'GND' }} pinAttributes={{ V5: { requiresPower: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Power" schX={-6} schY={-11} pcbX={J1.x} pcbY={J1.y} footprint={pads(['5V', 'GND'], 5.08, PWR)} />
-    <capacitor name="C1" capacitance="100uF" footprint="1210" schSheetName={SHEET} schSectionName="Power" schX={-4} schY={-11} schRotation={270} pcbX={C1.x} pcbY={C1.y} supplierPartNumbers={{ jlcpcb: ['C394395'] }} maxDecouplingTraceLength="60mm" />
+    <connector
+      name="J1"
+      schPinArrangement={{ rightSide: { direction: 'top-to-bottom', pins: ['V5', 'GND'] } }}
+      doNotPlace
+      pinLabels={{ pin1: 'V5', pin2: 'GND' }}
+      pinAttributes={{ V5: { requiresPower: true }, GND: { requiresGround: true } }}
+      schSheetName={SHEET}
+      schSectionName="Power"
+      schX={-3}
+      schY={-11}
+      pcbX={J1.x}
+      pcbY={J1.y}
+      footprint={pads('Power', ['5V', 'GND'], 5.08, PWR)}
+    />
+    <capacitor name="C1" capacitance="100uF" footprint="1210" schSheetName={SHEET} schSectionName="Power" schX={-1} schY={-11.2} schRotation={270} pcbX={C1.x} pcbY={C1.y} supplierPartNumbers={{ jlcpcb: ['C394395'] }} maxDecouplingTraceLength="60mm" />
     <chip
       name="U3"
       manufacturerPartNumber="AMS1117-3.3"
       footprint="sot223"
       pinLabels={{ pin1: 'GND', pin2: 'VOUT', pin3: 'VIN', pin4: 'TAB' }}
       pinAttributes={{ GND: { requiresGround: true }, VIN: { requiresPower: true } }}
-      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VIN', 'GND'] }, rightSide: { direction: 'top-to-bottom', pins: ['VOUT', 'TAB'] } }}
+      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VIN'] }, rightSide: { direction: 'top-to-bottom', pins: ['VOUT', 'TAB'] }, bottomSide: { direction: 'left-to-right', pins: ['GND'] } }}
       supplierPartNumbers={{ jlcpcb: ['C6186'] }}
       schSheetName={SHEET}
       schSectionName="Power"
-      schX={-1}
-      schY={-11}
+      schX={3}
+      schY={-10.5}
       pcbX={U3.x}
       pcbY={U3.y}
       pcbSx={{ '& silkscreentext': { pcbX: '0mm', pcbY: '3.4mm' } }}
     />
-    <capacitor name="C3" capacitance="22uF" footprint="0805" schSheetName={SHEET} schSectionName="Power" schX={1.2} schY={-12.6} schRotation={90} pcbX={C3.x} pcbY={C3.y} supplierPartNumbers={{ jlcpcb: ['C45783'] }} maxDecouplingTraceLength="60mm" />
+    <capacitor name="C3" capacitance="22uF" footprint="0805" schSheetName={SHEET} schSectionName="Power" schX={5.6} schY={-10.9} schRotation={270} pcbX={C3.x} pcbY={C3.y} supplierPartNumbers={{ jlcpcb: ['C45783'] }} maxDecouplingTraceLength="60mm" />
 
     {/* Level shifter: 3.3 V GPIO to 5 V WS2812 data */}
     <chip
@@ -227,82 +252,104 @@ export default () => (
       footprint="sot23_5"
       pinLabels={{ pin1: 'OE', pin2: 'A', pin3: 'GND', pin4: 'Y', pin5: 'VCC' }}
       pinAttributes={{ GND: { requiresGround: true }, VCC: { requiresPower: true } }}
-      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['A', 'OE', 'GND'] }, rightSide: { direction: 'top-to-bottom', pins: ['VCC', 'Y'] } }}
+      schPinArrangement={{ topSide: { direction: 'left-to-right', pins: ['VCC'] }, bottomSide: { direction: 'left-to-right', pins: ['GND'] }, leftSide: { direction: 'top-to-bottom', pins: ['A', 'OE'] }, rightSide: { direction: 'top-to-bottom', pins: ['Y'] } }}
       supplierPartNumbers={{ jlcpcb: ['C7484'] }}
       schSheetName={SHEET}
       schSectionName="LED output"
-      schX={8}
-      schY={0}
+      schX={9}
+      schY={-3.2}
       pcbX={U4.x}
       pcbY={U4.y}
     />
-    <capacitor name="C4" capacitance="100nF" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={10} schY={1.6} schRotation={270} pcbX={C4.x} pcbY={C4.y} supplierPartNumbers={{ jlcpcb: ['C14663'] }} maxDecouplingTraceLength="60mm" />
-    <resistor name="R2" resistance="330" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={11.2} schY={-0.6} pcbX={R2.x} pcbY={R2.y} supplierPartNumbers={{ jlcpcb: ['C23138'] }} />
+    <capacitor name="C4" capacitance="100nF" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={10.6} schY={-1.5} schRotation={270} pcbX={C4.x} pcbY={C4.y} supplierPartNumbers={{ jlcpcb: ['C14663'] }} maxDecouplingTraceLength="60mm" />
+    <resistor name="R2" resistance="330" footprint="0603" schSheetName={SHEET} schSectionName="LED output" schX={13} schY={-3.2} pcbX={R2.x} pcbY={R2.y} supplierPartNumbers={{ jlcpcb: ['C23138'] }} />
     <connector
       name="J4"
+      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['DATA', 'V5', 'GND'] } }}
       doNotPlace
       pinLabels={{ pin1: 'DATA', pin2: 'V5', pin3: 'GND' }}
       pinAttributes={{ DATA: { mustBeConnected: true }, V5: { requiresPower: true }, GND: { requiresGround: true } }}
       schSheetName={SHEET}
       schSectionName="LED output"
-      schX={15}
-      schY={-0.6}
+      schX={17}
+      schY={-3.4}
       pcbX={J4.x}
       pcbY={J4.y}
-      footprint={pads(['DATA', '5V', 'GND'], 2.54, SIG)}
+      footprint={pads('LED stripe', ['DATA', '5V', 'GND'], 2.54, SIG)}
     />
 
     {/* DFPlayer and speaker */}
     <chip
       name="U2"
+      schPinStyle={{ TX: { marginTop: 0.8 } }}
       doNotPlace
       manufacturerPartNumber="DFPlayer-16P (HW-247A)"
       pinLabels={DF_LABELS}
       pinAttributes={{ VCC: { requiresPower: true }, GND: { requiresGround: true } }}
-      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['VCC', 'RX', 'TX', 'BUSY', 'GND', 'GND2'] }, rightSide: { direction: 'top-to-bottom', pins: ['SPK2', 'SPK1', 'DAC_R', 'DAC_L', 'IO1', 'IO2', 'ADKEY1', 'ADKEY2', 'USB_P', 'USB_N'] } }}
+      schPinArrangement={{
+        topSide: { direction: 'left-to-right', pins: ['VCC'] },
+        bottomSide: { direction: 'left-to-right', pins: ['GND', 'GND2'] },
+        leftSide: { direction: 'top-to-bottom', pins: ['RX', 'TX'] },
+        rightSide: { direction: 'top-to-bottom', pins: ['SPK1', 'SPK2', 'BUSY', 'DAC_R', 'DAC_L', 'IO1', 'IO2', 'ADKEY1', 'ADKEY2', 'USB_P', 'USB_N'] }
+      }}
       schSheetName={SHEET}
       schSectionName="Audio"
       schX={14}
-      schY={-8}
+      schY={-5.8}
       pcbX={DF.x}
       pcbY={DF.y}
       pcbRotation={DF.rot}
       footprint={dfFootprint}
     />
-    <resistor name="R1" resistance="1k" footprint="0603" schSheetName={SHEET} schSectionName="Audio" schX={9.5} schY={-5.5} pcbX={R1.x} pcbY={R1.y} supplierPartNumbers={{ jlcpcb: ['C21190'] }} />
+    <resistor name="R1" resistance="1k" footprint="0603" schSheetName={SHEET} schSectionName="Audio" schX={8} schY={-5.3} pcbX={R1.x} pcbY={R1.y} supplierPartNumbers={{ jlcpcb: ['C21190'] }} />
     <connector
       name="J2"
       doNotPlace
       pinLabels={{ pin1: 'SPK1', pin2: 'SPK2' }}
       schSheetName={SHEET}
       schSectionName="Audio"
-      schPinArrangement={{ topSide: { direction: 'left-to-right', pins: ['SPK1', 'SPK2'] } }}
-      schX={16}
-      schY={-12.5}
+      schPinArrangement={{ leftSide: { direction: 'top-to-bottom', pins: ['SPK1', 'SPK2'] } }}
+      schX={18}
+      schY={-4.9}
       pcbX={J2.x}
       pcbY={J2.y}
-      footprint={pads(['SPK+', 'SPK-'], -5.08, PWR)}
+      footprint={pads('Speaker', ['SPK+', 'SPK-'], -5.08, PWR)}
     />
 
     {/* Snooze button input */}
-    <connector name="J3" doNotPlace pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }} pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }} schSheetName={SHEET} schSectionName="Input" schX={-6} schY={-6} pcbX={J3.x} pcbY={J3.y} footprint={pads(['SNZ', 'GND'], 2.54, SIG)} />
+    <connector
+      name="J3"
+      schPinArrangement={{ rightSide: { direction: 'top-to-bottom', pins: ['SNOOZE', 'GND'] } }}
+      doNotPlace
+      pinLabels={{ pin1: 'SNOOZE', pin2: 'GND' }}
+      pinAttributes={{ SNOOZE: { mustBeConnected: true }, GND: { requiresGround: true } }}
+      schSheetName={SHEET}
+      schSectionName="Input"
+      schX={-3}
+      schY={-7.1}
+      pcbX={J3.x}
+      pcbY={J3.y}
+      footprint={pads('Snooze', ['SNZ', 'GND'], 2.54, SIG)}
+    />
 
     {/* Light sensor: wire pads for a GY-302 (BH1750, 0x23) on the top edge, I2C pull-ups to 3V3 */}
     <connector
       name="J5"
+      schPinStyle={{ SCL: { marginTop: 3.3 } }}
+      schPinArrangement={{ rightSide: { direction: 'top-to-bottom', pins: ['V5', 'GND', 'SDA', 'SCL'] } }}
       doNotPlace
       pinLabels={{ pin1: 'V5', pin2: 'GND', pin3: 'SCL', pin4: 'SDA' }}
       pinAttributes={{ V5: { requiresPower: true }, GND: { requiresGround: true }, SCL: { mustBeConnected: true }, SDA: { mustBeConnected: true } }}
       schSheetName={SHEET}
       schSectionName="Sensor"
-      schX={-6.5}
-      schY={-1}
+      schX={-3}
+      schY={-3.35}
       pcbX={J5.x}
       pcbY={J5.y}
-      footprint={pads(['5V', 'GND', 'SCL', 'SDA'], 2.54, SIG)}
+      footprint={pads('Sensor', ['5V', 'GND', 'SCL', 'SDA'], 2.54, SIG, 1)}
     />
-    <resistor name="R3" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={-2.7} schY={1.8} schRotation={270} pcbX={R3.x} pcbY={R3.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
-    <resistor name="R4" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={-4.2} schY={1.8} schRotation={270} pcbX={R4.x} pcbY={R4.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
+    <resistor name="R3" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={0} schY={-5.6} schRotation={90} pcbX={R3.x} pcbY={R3.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
+    <resistor name="R4" resistance="4.7k" footprint="0603" schSheetName={SHEET} schSectionName="Sensor" schX={0} schY={-1.5} schRotation={270} pcbX={R4.x} pcbY={R4.y} supplierPartNumbers={{ jlcpcb: ['C23162'] }} />
 
     {/* GND: a bottom copper pour, 1.27 mm from the board edge, with a keep-out under the ESP32 antenna end (DESIGN.md rule 16). The through-hole GND pins join it directly, every SMD GND pad (C1, U4 GND/OE, U3, C3, C4) has its own GND via */}
     <copperpour connectsTo="net.GND" layer="bottom" boardEdgeMargin="1.27mm" />
@@ -356,9 +403,9 @@ export default () => (
     {wire45('V33_R4', 'C3 > .pin1', 'R4 > .pin1', C3, [C3_P1, pt(C3_P1.x, I2C.v33), pt(R4_P1.x, I2C.v33), R4_P1], 0.6, 0.7, [2])}
     {wire45('V33_R3', 'C3 > .pin1', 'R3 > .pin1', C3, [C3_P1, pt(C3_P1.x, I2C.v33), pt(R3_P1.x, I2C.v33), R3_P1], 0.6, 0.7)}
     {wire('SDA', 'U1 > .IO9', 'R4 > .pin2', ESP_F, [...hop(pt(espAt(17).x, I2C.hop)), ...chamfer([pt(espAt(17).x, I2C.hop), pt(espAt(17).x, I2C.sda), pt(R4_P2.x, I2C.sda), pt(R4_P2.x, I2C.via)], 0.9).slice(1, -1), ...hop(pt(R4_P2.x, I2C.via), 'bottom', 'top')])}
-    {wire45('SDA_J5', 'R4 > .pin2', 'J5 > .SDA', R4, [R4_P2, pt(R4_P2.x, I2C.laneSda), pt(J5_SDA.x, I2C.laneSda), J5_SDA], 0.25, 0.8)}
+    {wire('SDA_J5', 'R4 > .pin2', 'J5 > .SDA', R4, [...chamfer([R4_P2, pt(I2C.tapSda, R4_P2.y), pt(I2C.tapSda, I2C.laneSda)], 0.8).slice(1, -1), ...hop(pt(I2C.tapSda, I2C.laneSda)), ...chamfer([pt(I2C.tapSda, I2C.laneSda), pt(J5_SDA.x, I2C.laneSda), J5_SDA], 0.8).slice(1, -1)])}
     {wire('SCL', 'U1 > .IO8', 'R3 > .pin2', ESP_F, [...hop(pt(espAt(18).x, I2C.hop)), ...chamfer([pt(espAt(18).x, I2C.hop), pt(espAt(18).x, I2C.scl), pt(R3_P2.x, I2C.scl), pt(R3_P2.x, I2C.via)], 0.9).slice(1, -1), ...hop(pt(R3_P2.x, I2C.via), 'bottom', 'top')])}
-    {wire45('SCL_J5', 'R3 > .pin2', 'J5 > .SCL', R3, [R3_P2, pt(R3_P2.x, I2C.laneScl), pt(J5_SCL.x, I2C.laneScl), J5_SCL], 0.25, 0.6)}
+    {wire('SCL_J5', 'R3 > .pin2', 'J5 > .SCL', R3, [...chamfer([R3_P2, pt(I2C.tapScl, R3_P2.y), pt(I2C.tapScl, I2C.laneScl)], 0.8).slice(1, -1), ...hop(pt(I2C.tapScl, I2C.laneScl)), ...chamfer([pt(I2C.tapScl, I2C.laneScl), pt(J5_SCL.x, I2C.laneScl), J5_SCL], 0.8).slice(1, -1)])}
 
     {[EDGE_L + HOLE.inset, EDGE_R - HOLE.inset].flatMap((hx) =>
       [-1, 1].map((sy) => (
