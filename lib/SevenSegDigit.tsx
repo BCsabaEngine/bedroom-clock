@@ -2,6 +2,8 @@ import { Fragment } from 'react';
 
 import { LEDS_PER_DIGIT, LEDS_PER_SEGMENT, SEGMENT_ORDER } from './ledLayout';
 import { LED_PITCH, LedSegment } from './LedSegment';
+import { chamfer, type P, pt } from './wire';
+import { LED_PADS } from './Ws2812Led';
 
 // One 7-segment digit in the style of discrete bars: the bars never touch, there is a ~3 mm gap at every corner. The horizontal bars sit
 // between the two vertical columns, each vertical bar between two horizontal bars. About 120 mm high, 65 mm wide (outer copper).
@@ -24,7 +26,6 @@ const GEOMETRY = {
 export const SEGMENTS = SEGMENT_ORDER.map((id) => ({ id, ...GEOMETRY[id] }));
 export { LEDS_PER_DIGIT, LEDS_PER_SEGMENT };
 
-type P = { x: number; y: number };
 const rotate = (deg: number, x: number, y: number): P => ({ x: x * Math.cos((deg * Math.PI) / 180) - y * Math.sin((deg * Math.PI) / 180), y: x * Math.sin((deg * Math.PI) / 180) + y * Math.cos((deg * Math.PI) / 180) });
 
 // pcbPath points are given in the frame of the component owning the trace's `from` port: convert digit coordinates into LED k's frame (LED k sits on its bar, rotated 180deg).
@@ -34,11 +35,19 @@ export const toLed = (k: number) => {
   return ({ x, y }: P) => rotate(-(s.rot + 180), x - (s.x + c.x), y - (s.y + c.y));
 };
 export const via = (p: P, fromLayer: 'top' | 'bottom' = 'top', toLayer: 'top' | 'bottom' = 'bottom') => ({ ...p, via: true, fromLayer, toLayer }) as const;
-const pt = (x: number, y: number): P => ({ x, y });
+const round = (v: number) => Math.round(v * 1e4) / 1e4;
+// Pad centre of LED k (0..69 in chain order) in digit coordinates.
+export const padAt = (k: number, pin: keyof typeof LED_PADS): P => {
+  const s = SEGMENTS[Math.floor(k / LEDS_PER_SEGMENT)];
+  const c = rotate(s.rot, (k % LEDS_PER_SEGMENT) * LED_PITCH, 0);
+  const o = rotate(s.rot + 180, LED_PADS[pin].x, LED_PADS[pin].y);
+  return pt(round(s.x + c.x + o.x), round(s.y + c.y + o.y));
+};
+export const CUT = 0.5; // 45 deg corner cut of the explicit copper (rule 17)
 
 // Corner links, digit coordinates, from the last LED of one bar to the first LED of the next. Pad centres are LED centre +-0.889 along the bar and
 // +-0.575 across it. `v5` runs from the 5V rail end around the corner through the 3 mm gap between the bars, `data` from the DOUT pad to the
-// DIN pad. All links stay on the top layer.
+// DIN pad. All links stay on the top layer; their corners are cut to 45 deg (rule 17) between the pad centres (`padAt`).
 const LINKS = [
   { data: [pt(-27.925, 58.175)], v5: [pt(-27, 50.711), pt(-27, 54.4), pt(-23.389, 54.4)] }, // f -> a
   { data: [pt(30.4, 57.025), pt(30.4, 52.489)], v5: [pt(21.611, 56.1), pt(27, 56.1), pt(27, 52.489)] }, // a -> b
@@ -51,17 +60,21 @@ const LINKS = [
 export const SevenSegDigit = ({ first = 1, gnd, pcbX = 0, pcbY = 0, sheet, schY = 0 }: { first?: number; gnd: string; pcbX?: number; pcbY?: number; sheet: string; schY?: number }) => (
   <>
     {SEGMENTS.map((s, i) => (
-      <LedSegment key={s.id} first={first + i * LEDS_PER_SEGMENT} gnd={gnd} x={pcbX + s.x} y={pcbY + s.y} rot={s.rot} sheet={sheet} schX={0} schY={schY - i * 3.2} />
+      <LedSegment key={s.id} first={first + i * LEDS_PER_SEGMENT} gnd={gnd} x={pcbX + s.x} y={pcbY + s.y} rot={s.rot} sheet={sheet} section={`Segment ${s.id}`} schX={0} schY={schY - i * 3.2} />
     ))}
     {LINKS.map((l, i) => {
       const k = (i + 1) * LEDS_PER_SEGMENT - 1;
       const n = first + k;
       const loc = toLed(k);
       const local = (p: P & { via?: boolean }) => ({ ...p, ...loc(p) });
+      const path = (a: P, mid: readonly P[], b: P) =>
+        chamfer([a, ...mid, b], CUT)
+          .slice(1, -1)
+          .map(local);
       return (
         <Fragment key={i}>
-          <trace name={`DATA_${n}`} from={`.U${n} > .DOUT`} to={`.U${n + 1} > .DIN`} pcbPath={l.data.map(local)} thickness="0.25mm" schDisplayLabel={`D${n}`} />
-          <trace name={`VCC_${n}`} from={`.U${n} > .VDD`} to={`.U${n + 1} > .VDD`} pcbPath={l.v5.map(local)} thickness="0.5mm" schDisplayLabel="V5" />
+          <trace name={`DATA_${n}`} from={`.U${n} > .DOUT`} to={`.U${n + 1} > .DIN`} pcbPath={path(padAt(k, 'DOUT'), l.data, padAt(k + 1, 'DIN'))} thickness="0.25mm" schDisplayLabel={`D${n}`} />
+          <trace name={`VCC_${n}`} from={`.U${n} > .VDD`} to={`.U${n + 1} > .VDD`} pcbPath={path(padAt(k, 'VDD'), l.v5, padAt(k + 1, 'VDD'))} thickness="0.5mm" schDisplayLabel="V5" />
         </Fragment>
       );
     })}

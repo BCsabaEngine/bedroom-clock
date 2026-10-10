@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 
 import { via } from './lib/SevenSegDigit';
+import { chamfer, type P, pt } from './lib/wire';
 
 // Controller board of the bedroom clock (60 x 45 mm): ESP32-S3 SuperMini at the left edge (USB-C end towards it, antenna end towards the board centre) and the DFPlayer (HW-247A, 16P)
 // on the same baseline (bottom pin rows level), 5V in through a P-MOSFET reverse polarity protection, AP7361C-3.3 LDO for the ESP32 above the module (1 uF input cap, Schottky D1 between its output and the module 3V3 pin), 74AHCT1G125 level shifter + 330R for the WS2812 data line (10k pull-down on its input), the speaker pads, a snooze button input, four wire pads on the top edge for an external BH1750 light sensor (GY-302, I2C with two pull-ups) and four 3.5mm corner holes. See README.md.
@@ -151,7 +152,6 @@ const pads = (group: string, labels: string[], pitch: number, { drill, pad } = S
   );
 };
 
-type P = { x: number; y: number };
 type Pt = P & { via?: boolean };
 type Frame = P & { rot?: number };
 // pcbPath points are in the frame of the component owning the trace's `from` port (position and rotation, see README): board point -> local point (flags such as `via` are kept).
@@ -169,19 +169,6 @@ const wire = (name: string, from: string, to: string, owner: Frame, pts: Pt[], t
 const hop = (p: P, from: 'top' | 'bottom' = 'top', to: 'top' | 'bottom' = 'bottom'): Pt[] => [p, via(p, from, to), p];
 // GND is a bottom copper pour (rule 16). Through-hole GND pins touch it directly (a plain `to="net.GND"` connection, no copper to draw); every SMD GND pad gets a GND via to it (see README).
 const gndTrace = (port: string) => <trace from={`.${port}`} to="net.GND" />;
-const pt = (x: number, y: number): P => ({ x, y });
-// No 90 deg corners (LAYOUT_RULES.md rule 17): each one becomes two 45 deg bends, a T junction stays sharp. `poly` = pad centre, corners (board coordinates, orthogonal segments), pad centre; `c` = cut length (one number, or one per vertex index of `poly`); corner indices in `keep` are T junctions.
-const chamfer = (poly: P[], c: number | number[] = G, keep: number[] = []): P[] =>
-  poly.flatMap((v, i) => {
-    if (i === 0 || i === poly.length - 1 || keep.includes(i)) return [v];
-    const a = poly[i - 1];
-    const b = poly[i + 1];
-    const din = { x: Math.sign(v.x - a.x), y: Math.sign(v.y - a.y) };
-    const dout = { x: Math.sign(b.x - v.x), y: Math.sign(b.y - v.y) };
-    if (din.x * dout.x + din.y * dout.y !== 0) return [v];
-    const d = Math.min(Array.isArray(c) ? (c[i] ?? G) : c, Math.hypot(v.x - a.x, v.y - a.y), Math.hypot(b.x - v.x, b.y - v.y));
-    return [pt(v.x - din.x * d, v.y - din.y * d), pt(v.x + dout.x * d, v.y + dout.y * d)];
-  });
 // Like wire(), but the path is the full polyline from pad centre to pad centre and its 90 deg corners are chamfered.
 const wire45 = (name: string, from: string, to: string, owner: Frame, poly: P[], thickness = 0.25, c: number | number[] = G, keep: number[] = []) => wire(name, from, to, owner, chamfer(poly, c, keep).slice(1, -1), thickness);
 
