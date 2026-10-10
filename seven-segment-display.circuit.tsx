@@ -16,7 +16,7 @@ const HOLE = { d: 3.5, x: 34, y: 58 }; // corner mounting holes (board coordinat
 const inJ1 = ({ x, y }: { x: number; y: number }) => ({ x: x - J1.x, y: y - J1.y });
 
 export default () => (
-  <board width="76mm" height="124mm" borderRadius="2mm" thickness="1.6mm" routeRemaining={false}>
+  <board width="76mm" height="124mm" layers={2} borderRadius="2mm" thickness="1.6mm" routeRemaining={false} pcbStyle={{ viaPadDiameter: 0.6, viaHoleDiameter: 0.3 }}>
     <schematicsheet name={SHEET} displayName="LED digit" sheetIndex={0} sheetWidth="400mm" sheetHeight="260mm" />
 
     <SevenSegDigit first={1} gnd="net.GND" pcbX={DIGIT_X} pcbY={DIGIT_Y} sheet={SHEET} schY={10} />
